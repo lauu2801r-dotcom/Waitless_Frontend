@@ -1,0 +1,32 @@
+name: waitless
+description: "App para cliente de restaurante con predicción de flujo y pedidos en tiempo real."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Tipografías de Google (Playfair Display + Inter)
+  google_fonts: ^6.2.1
+
+  # Gráficas
+  fl_chart: ^0.68.0
+
+  # Almacenamiento local persistente (web, móvil, escritorio)
+  shared_preferences: ^2.3.2
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
