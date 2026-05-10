@@ -5,7 +5,7 @@ import '../models/usuario.dart';
 import 'auth_repository.dart';
 
 class ApiAuthRepository implements AuthRepository {
-  static const String _baseUrl = 'http://127.0.0.1:8000';
+  static const String _baseUrl = 'http://10.0.2.2:8000';
   static const String _kClaveSesion = 'waitless.sesion_actual';
   static const String _kClaveToken = 'waitless.token';
 
@@ -39,6 +39,7 @@ class ApiAuthRepository implements AuthRepository {
     required String nombreCompleto,
     required String correo,
     required String password,
+    required String? telefono,
   }) async {
     try {
       final partes = nombreCompleto.trim().split(' ');
@@ -53,6 +54,7 @@ class ApiAuthRepository implements AuthRepository {
           'apellido': apellido,
           'email': correo,
           'password': password,
+          'telefono': telefono,
         }),
       );
 

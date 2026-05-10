@@ -18,6 +18,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nombreCtrl = TextEditingController();
   final _correoCtrl = TextEditingController();
+  final _telefonoCtrl = TextEditingController();
   final _pwdCtrl = TextEditingController();
   final _confirmPwdCtrl = TextEditingController();
 
@@ -42,6 +43,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
   void dispose() {
     _nombreCtrl.dispose();
     _correoCtrl.dispose();
+    _telefonoCtrl.dispose();
     _pwdCtrl.dispose();
     _confirmPwdCtrl.dispose();
     super.dispose();
@@ -59,10 +61,11 @@ class _RegistroScreenState extends State<RegistroScreen> {
     setState(() => _cargando = true);
     final auth = AuthScope.of(context);
     final resultado = await auth.registrarCliente(
-      nombreCompleto: _nombreCtrl.text,
-      correo: _correoCtrl.text,
-      password: _pwdCtrl.text,
-    );
+        nombreCompleto: _nombreCtrl.text,
+        correo: _correoCtrl.text,
+        password: _pwdCtrl.text,
+        telefono: _telefonoCtrl.text.isEmpty ? null : _telefonoCtrl.text,
+      );
     if (!mounted) return;
     setState(() => _cargando = false);
 
@@ -72,7 +75,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
           MaterialPageRoute(
             builder: (_) => VerificacionScreen(
               correo: _correoCtrl.text.trim().toLowerCase(),
-              codigoSimulado: datos,
+              codigoSimulado: null,
             ),
           ),
         );
@@ -179,6 +182,27 @@ class _RegistroScreenState extends State<RegistroScreen> {
                               hintText: 'tu@correo.com',
                               prefixIcon: Icon(
                                 Icons.mail_outline,
+                                color: AppColors.cafeMedio,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+
+                          // Teléfono
+                          const _EtiquetaCampo(
+                            texto: 'Teléfono',
+                            icono: Icons.phone_outlined,
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _telefonoCtrl,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              hintText: 'Ej. 3001234567',
+                              prefixIcon: Icon(
+                                Icons.phone_outlined,
                                 color: AppColors.cafeMedio,
                                 size: 20,
                               ),

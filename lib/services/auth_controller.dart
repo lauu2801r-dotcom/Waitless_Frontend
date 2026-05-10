@@ -27,11 +27,13 @@ class AuthController extends ChangeNotifier {
     required String nombreCompleto,
     required String correo,
     required String password,
+    required String? telefono,
   }) {
     return repositorio.registrarCliente(
       nombreCompleto: nombreCompleto,
       correo: correo,
       password: password,
+      telefono: telefono,
     );
   }
 

@@ -19,6 +19,7 @@ abstract class AuthRepository {
     required String nombreCompleto,
     required String correo,
     required String password,
+    required String? telefono,
   });
 
   Future<AuthResultado<String>> registrarAdministrador({
