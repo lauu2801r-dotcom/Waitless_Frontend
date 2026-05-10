@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/pedido_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/common_widgets.dart';
-import '../models/pedido.dart';
 
 class DetallePedidoScreen extends StatelessWidget {
-  final Pedido pedido;
+  final PedidoApi pedido;
   const DetallePedidoScreen({super.key, required this.pedido});
 
   void _llamarMesero(BuildContext context) {
@@ -102,19 +101,30 @@ class DetallePedidoScreen extends StatelessWidget {
     );
   }
 
+  Color _colorEstado() {
+    if (pedido.estado == EstadoPedidoApi.pendiente) return AppColors.cafeMedio;
+    if (pedido.estado == EstadoPedidoApi.en_preparacion) return AppColors.oliva;
+    if (pedido.estado == EstadoPedidoApi.listo) return AppColors.terracota;
+    if (pedido.estado == EstadoPedidoApi.entregado) return AppColors.exitoTexto;
+    return AppColors.cafeMedio; // cancelado
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cantItems = pedido.items.fold(0, (s, i) => s + i.cantidad);
+    final color = _colorEstado();
+
+    // Pasos del timeline según EstadoPedidoApi
     final pasos = [
-      _PasoTimeline('Recibido', '14:32', EstadoPedido.recibido),
-      _PasoTimeline('En preparación', '14:34', EstadoPedido.enCocina),
-      _PasoTimeline('Emplatando', 'ahora', EstadoPedido.emplatado),
-      _PasoTimeline('En camino', '~4 min', EstadoPedido.enCamino),
-      _PasoTimeline('Entregado', '—', EstadoPedido.entregado),
+      _PasoTimeline('Pendiente', EstadoPedidoApi.pendiente),
+      _PasoTimeline('En preparación', EstadoPedidoApi.en_preparacion),
+      _PasoTimeline('Listo', EstadoPedidoApi.listo),
+      _PasoTimeline('Entregado', EstadoPedidoApi.entregado),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Pedido #${pedido.numero}'),
+        title: Text('Pedido #${pedido.id}'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
@@ -125,6 +135,7 @@ class DetallePedidoScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Tarjeta principal ──
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -136,28 +147,63 @@ class DetallePedidoScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Estado + hora
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      ChipEstado(estado: pedido.estado),
-                      Text(pedido.horaPedido,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          pedido.estado.etiqueta,
                           style: GoogleFonts.inter(
-                              fontSize: 12, color: AppColors.cafeMedio)),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: color),
+                        ),
+                      ),
+                      Text(
+                        pedido.horaFormateada,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.cafeMedio),
+                      ),
                     ],
                   ),
+
                   const SizedBox(height: 16),
-                  Text(pedido.plato, style: AppTheme.titulo(size: 26)),
-                  if (pedido.detalle != null) ...[
-                    const SizedBox(height: 4),
-                    Text(pedido.detalle!,
-                        style: GoogleFonts.inter(
-                            fontSize: 13, color: AppColors.cafeMedio)),
+
+                  // Mesa e items
+                  Text(
+                    'Mesa ${pedido.mesaId}',
+                    style: AppTheme.titulo(size: 26),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$cantItems ${cantItems == 1 ? 'producto' : 'productos'}',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, color: AppColors.cafeMedio),
+                  ),
+
+                  if (pedido.notas != null && pedido.notas!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Nota: ${pedido.notas}',
+                      style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.cafeMedio,
+                          fontStyle: FontStyle.italic),
+                    ),
                   ],
 
                   const SizedBox(height: 20),
                   const Divider(color: AppColors.bordeSuave, height: 1),
                   const SizedBox(height: 20),
 
+                  // Timeline
                   Text('PROGRESO EN TIEMPO REAL',
                       style: AppTheme.etiqueta()),
                   const SizedBox(height: 16),
@@ -165,12 +211,11 @@ class DetallePedidoScreen extends StatelessWidget {
                   ...List.generate(pasos.length, (i) {
                     final paso = pasos[i];
                     final actual = paso.estado == pedido.estado;
-                    final completado = paso.estado.progreso <=
-                        pedido.estado.progreso -
-                            (actual ? 0.001 : -0.001);
+                    final completado =
+                        paso.estado.progreso < pedido.estado.progreso ||
+                            actual;
                     return _TimelineStep(
                       titulo: paso.titulo,
-                      hora: paso.hora,
                       esUltimo: i == pasos.length - 1,
                       completado: completado,
                       actual: actual,
@@ -182,6 +227,7 @@ class DetallePedidoScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
+            // ── Resumen de items ──
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -190,13 +236,31 @@ class DetallePedidoScreen extends StatelessWidget {
                 border: Border.all(color: AppColors.borde),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _filaResumen('Subtotal', '\$${_fmt(pedido.precio)}'),
-                  const SizedBox(height: 6),
-                  _filaResumen('Propina sugerida',
-                      '\$${_fmt(pedido.precio * 0.1)}',
-                      tenue: true),
+                  Text('DETALLE DEL PEDIDO', style: AppTheme.etiqueta()),
                   const SizedBox(height: 12),
+                  ...pedido.items.map((item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${item.cantidad}x Producto #${item.productoId}',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, color: AppColors.cafeOscuro),
+                            ),
+                            Text(
+                              '\$${item.subtotal.toInt()}',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppColors.cafeOscuro,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      )),
+                  const SizedBox(height: 8),
                   const Divider(color: AppColors.bordeSuave, height: 1),
                   const SizedBox(height: 12),
                   Row(
@@ -205,8 +269,10 @@ class DetallePedidoScreen extends StatelessWidget {
                       Text('Total',
                           style: GoogleFonts.inter(
                               fontSize: 13, color: AppColors.cafeMedio)),
-                      Text('\$${_fmt(pedido.precio * 1.1)}',
-                          style: AppTheme.titulo(size: 22)),
+                      Text(
+                        pedido.totalFormateado,
+                        style: AppTheme.titulo(size: 22),
+                      ),
                     ],
                   ),
                 ],
@@ -215,12 +281,13 @@ class DetallePedidoScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
+            // ── Llamar al mesero ──
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () => _llamarMesero(context),
-                icon:
-                    const Icon(Icons.support_agent, color: AppColors.terracota),
+                icon: const Icon(Icons.support_agent,
+                    color: AppColors.terracota),
                 label: Text(
                   'Llamar al mesero',
                   style: GoogleFonts.inter(
@@ -241,46 +308,26 @@ class DetallePedidoScreen extends StatelessWidget {
       ),
     );
   }
-
-  Widget _filaResumen(String label, String valor, {bool tenue = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: GoogleFonts.inter(
-                fontSize: 12,
-                color: tenue ? AppColors.cafeMedio : AppColors.cafeOscuro)),
-        Text(valor,
-            style: GoogleFonts.inter(
-                fontSize: 12,
-                color: tenue ? AppColors.cafeMedio : AppColors.cafeOscuro,
-                fontWeight: FontWeight.w500)),
-      ],
-    );
-  }
-
-  String _fmt(double n) => n
-      .toStringAsFixed(0)
-      .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.');
 }
+
+// ─────────────────────────────────────────────────────────────
+//  HELPERS INTERNOS
+// ─────────────────────────────────────────────────────────────
 
 class _PasoTimeline {
   final String titulo;
-  final String hora;
-  final EstadoPedido estado;
-  _PasoTimeline(this.titulo, this.hora, this.estado);
+  final EstadoPedidoApi estado;
+  _PasoTimeline(this.titulo, this.estado);
 }
 
 class _TimelineStep extends StatelessWidget {
   final String titulo;
-  final String hora;
   final bool esUltimo;
   final bool completado;
   final bool actual;
 
   const _TimelineStep({
     required this.titulo,
-    required this.hora,
     required this.esUltimo,
     required this.completado,
     required this.actual,
@@ -313,7 +360,9 @@ class _TimelineStep extends StatelessWidget {
                 Expanded(
                   child: Container(
                     width: 2,
-                    color: completado ? AppColors.oliva : AppColors.bordeSuave,
+                    color: completado
+                        ? AppColors.oliva
+                        : AppColors.bordeSuave,
                   ),
                 ),
             ],
@@ -322,30 +371,16 @@ class _TimelineStep extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: EdgeInsets.only(bottom: esUltimo ? 0 : 18),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    titulo,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: actual || completado
-                          ? AppColors.cafeOscuro
-                          : AppColors.cafeMedio,
-                      fontWeight:
-                          actual ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                  Text(
-                    hora,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color:
-                          actual ? AppColors.terracota : AppColors.cafeMedio,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+              child: Text(
+                titulo,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: actual || completado
+                      ? AppColors.cafeOscuro
+                      : AppColors.cafeMedio,
+                  fontWeight:
+                      actual ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
             ),
           ),

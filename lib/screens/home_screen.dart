@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_controller.dart';
+import '../services/pedido_service.dart';
 import '../utils/app_strings.dart';
+import '../services/menu_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,6 +15,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _categoriaSeleccionada = 'Todos';
+  List<Producto> _productos = [];
+  bool _cargandoMenu = false;
 
   final List<Map<String, dynamic>> _categorias = [
     {'nombre': 'Todos', 'emoji': '🍽️'},
@@ -21,6 +25,21 @@ class _HomeScreenState extends State<HomeScreen> {
     {'nombre': 'Postres', 'emoji': '🍰'},
     {'nombre': 'Bebidas', 'emoji': '🍹'},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarMenu();
+  }
+
+  Future<void> _cargarMenu() async {
+    setState(() => _cargandoMenu = true);
+    final productos = await MenuService.obtenerMenu();
+    setState(() {
+      _productos = productos;
+      _cargandoMenu = false;
+    });
+  }
 
   void _abrirHoja({
     required String titulo,
@@ -112,21 +131,12 @@ class _HomeScreenState extends State<HomeScreen> {
       contenido: StatefulBuilder(
         builder: (ctx, setS) {
           final q = ctrl.text.toLowerCase();
-          const platos = [
-            ('🍝', 'Pasta al pesto', 'Italiana · 28.500'),
-            ('🐟', 'Salmón a las hierbas', 'Marisco · 38.500'),
-            ('🍰', 'Tiramisú casero', 'Postre · 14.000'),
-            ('🍚', 'Risotto de hongos', 'Italiana · 32.000'),
-            ('🥥', 'Limonada de coco', 'Bebida · 9.500'),
-            ('🥗', 'Ensalada César', 'Entrada · 22.000'),
-            ('🦐', 'Risotto de mariscos', 'Italiana · 42.000'),
-          ];
           final filtrados = q.isEmpty
-              ? platos
-              : platos
+              ? _productos
+              : _productos
                   .where((p) =>
-                      p.$2.toLowerCase().contains(q) ||
-                      p.$3.toLowerCase().contains(q))
+                      p.nombre.toLowerCase().contains(q) ||
+                      (p.categoria?.toLowerCase().contains(q) ?? false))
                   .toList();
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -142,48 +152,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 18),
-              if (q.isEmpty) ...[
-                Text('SUGERENCIAS', style: AppTheme.etiqueta()),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: ['Italiana', 'Vegetariano', 'Postres', 'Bajo \$20']
-                      .map((s) => InkWell(
-                            onTap: () {
-                              ctrl.text = s;
-                              setS(() {});
-                            },
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: AppColors.superficie,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.borde),
-                              ),
-                              child: Text(s,
-                                  style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.cafeOscuro)),
-                            ),
-                          ))
-                      .toList(),
-                ),
-                const SizedBox(height: 22),
-              ],
               Text('RESULTADOS (${filtrados.length})',
                   style: AppTheme.etiqueta()),
               const SizedBox(height: 10),
               ...filtrados.map((p) => _ItemBusqueda(
-                    emoji: p.$1,
-                    nombre: p.$2,
-                    detalle: p.$3,
+                    emoji: p.emoji,
+                    nombre: p.nombre,
+                    detalle: '${p.categoria ?? ''} · ${p.precioFormateado}',
                     onTap: () {
                       Navigator.pop(ctx);
-                      _abrirDetallePlato(p.$1, p.$2, p.$3);
+                      _abrirDetallePlato(p);
                     },
                   )),
               if (filtrados.isEmpty)
@@ -318,7 +296,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _TarjetaPromo(
             emoji: '👥',
             titulo: 'Trae a un amigo, postres gratis',
-            descripcion: 'Comparte un plato fuerte y los postres son por la casa.',
+            descripcion:
+                'Comparte un plato fuerte y los postres son por la casa.',
             badge: '2x1',
             color: AppColors.cafeOscuro,
           ),
@@ -331,27 +310,26 @@ class _HomeScreenState extends State<HomeScreen> {
     _abrirHoja(
       titulo: 'Menú completo',
       altura: 0.85,
-      contenido: const Column(
-        children: [
-          _ItemMenu(emoji: '🥗', nombre: 'Ensalada César', precio: '\$22.000', categoria: 'Entrada'),
-          _ItemMenu(emoji: '🍞', nombre: 'Bruschettas', precio: '\$18.000', categoria: 'Entrada'),
-          _ItemMenu(emoji: '🥩', nombre: 'Carpaccio de res', precio: '\$26.000', categoria: 'Entrada'),
-          _ItemMenu(emoji: '🍝', nombre: 'Pasta al pesto', precio: '\$28.500', categoria: 'Principal'),
-          _ItemMenu(emoji: '🍚', nombre: 'Risotto de hongos', precio: '\$32.000', categoria: 'Principal'),
-          _ItemMenu(emoji: '🐟', nombre: 'Salmón a las hierbas', precio: '\$38.500', categoria: 'Principal'),
-          _ItemMenu(emoji: '🦐', nombre: 'Risotto de mariscos', precio: '\$42.000', categoria: 'Principal'),
-          _ItemMenu(emoji: '🍰', nombre: 'Tiramisú casero', precio: '\$14.000', categoria: 'Postre'),
-          _ItemMenu(emoji: '🍰', nombre: 'Cheesecake', precio: '\$13.500', categoria: 'Postre'),
-          _ItemMenu(emoji: '🥥', nombre: 'Limonada de coco', precio: '\$9.500', categoria: 'Bebida'),
-          _ItemMenu(emoji: '🍷', nombre: 'Vino tinto reserva', precio: '\$18.000', categoria: 'Bebida'),
-        ],
-      ),
+      contenido: _cargandoMenu
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: _productos
+                  .map((p) => _ItemMenu(
+                        emoji: p.emoji,
+                        nombre: p.nombre,
+                        precio: p.precioFormateado,
+                        categoria: p.categoria ?? '',
+                        onTap: () => _abrirDetallePlato(p),
+                      ))
+                  .toList(),
+            ),
     );
   }
 
-  void _abrirDetallePlato(String emoji, String nombre, String detalle) {
+  // ── Recibe el Producto completo para poder agregarlo al carrito ──
+  void _abrirDetallePlato(Producto producto) {
     _abrirHoja(
-      titulo: nombre,
+      titulo: producto.nombre,
       altura: 0.55,
       contenido: Column(
         children: [
@@ -362,16 +340,29 @@ class _HomeScreenState extends State<HomeScreen> {
               color: AppColors.terracota.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(18),
             ),
-            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 80))),
+            child: Center(
+                child: Text(producto.emoji,
+                    style: const TextStyle(fontSize: 80))),
           ),
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(detalle,
-                style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.cafeMedio,
-                    height: 1.5)),
+            child: Text(
+              producto.descripcion ?? '',
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: AppColors.cafeMedio, height: 1.5),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              producto.precioFormateado,
+              style: GoogleFonts.playfairDisplay(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.terracota),
+            ),
           ),
           const SizedBox(height: 14),
           Container(
@@ -397,10 +388,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              _toast('$nombre agregado a tu pedido');
+              Carrito().agregar(producto); // ← agrega al carrito
+              _toast('${producto.nombre} agregado al carrito 🛒');
             },
             icon: const Icon(Icons.add_shopping_cart, size: 18),
-            label: const Text('AGREGAR AL PEDIDO'),
+            label: const Text('AGREGAR AL CARRITO'),
           ),
         ],
       ),
@@ -413,7 +405,8 @@ class _HomeScreenState extends State<HomeScreen> {
         content: Text(msg, style: GoogleFonts.inter(color: AppColors.crema)),
         backgroundColor: AppColors.cafeOscuro,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -431,7 +424,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ═══════════════════ HEADER ═══════════════════
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Row(
@@ -485,10 +477,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 16),
-
-              // ═══════════════════ BARRA DE BÚSQUEDA ═══════════════════
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: InkWell(
@@ -531,77 +520,73 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // ═══════════════════ BANNER PROMOCIONAL ═══════════════════
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: InkWell(
                   onTap: _abrirPromos,
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.cafeOscuro,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.terracota,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                AppStrings.t(context, 'oferta_hoy'),
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.crema,
-                                  letterSpacing: 1,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.cafeOscuro,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.terracota,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  AppStrings.t(context, 'oferta_hoy'),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.crema,
+                                    letterSpacing: 1,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              '20% OFF',
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.crema,
+                              const SizedBox(height: 12),
+                              Text(
+                                '20% OFF',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.crema,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'En todos los platos\nde temporada',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: AppColors.crema.withValues(alpha: 0.8),
-                                height: 1.4,
+                              const SizedBox(height: 4),
+                              Text(
+                                'En todos los platos\nde temporada',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppColors.crema
+                                      .withValues(alpha: 0.8),
+                                  height: 1.4,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const Text('🍽️', style: TextStyle(fontSize: 60)),
-                    ],
+                        const Text('🍽️',
+                            style: TextStyle(fontSize: 60)),
+                      ],
+                    ),
                   ),
                 ),
-                ),
               ),
-
               const SizedBox(height: 24),
-
-              // ═══════════════════ ACCIONES RÁPIDAS ═══════════════════
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -635,10 +620,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 28),
-
-              // ═══════════════════ CATEGORÍAS ═══════════════════
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
@@ -660,13 +642,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
                   itemBuilder: (_, index) {
                     final cat = _categorias[index];
-                    final selected = _categoriaSeleccionada == cat['nombre'];
+                    final selected =
+                        _categoriaSeleccionada == cat['nombre'];
                     return GestureDetector(
-                      onTap: () =>
-                          setState(() => _categoriaSeleccionada = cat['nombre']),
+                      onTap: () => setState(
+                          () => _categoriaSeleccionada = cat['nombre']),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16),
                         decoration: BoxDecoration(
                           color: selected
                               ? AppColors.terracota
@@ -681,7 +665,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(cat['emoji'], style: const TextStyle(fontSize: 16)),
+                            Text(cat['emoji'],
+                                style: const TextStyle(fontSize: 16)),
                             const SizedBox(width: 8),
                             Text(
                               cat['nombre'],
@@ -700,10 +685,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
               ),
-
               const SizedBox(height: 28),
-
-              // ═══════════════════ DESTACADOS ═══════════════════
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -739,57 +721,30 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               SizedBox(
                 height: 220,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  children: [
-                    _TarjetaPlatoDestacado(
-                      emoji: '🍝',
-                      nombre: 'Pasta Carbonara',
-                      categoria: 'Italiana',
-                      precio: '\$28.500',
-                      rating: '4.8',
-                      onTap: () => _abrirDetallePlato(
-                          '🍝', 'Pasta Carbonara', 'Italiana · \$28.500'),
-                    ),
-                    const SizedBox(width: 12),
-                    _TarjetaPlatoDestacado(
-                      emoji: '🥩',
-                      nombre: 'Bife de Chorizo',
-                      categoria: 'Carnes',
-                      precio: '\$42.000',
-                      rating: '4.9',
-                      onTap: () => _abrirDetallePlato(
-                          '🥩', 'Bife de Chorizo', 'Carnes · \$42.000'),
-                    ),
-                    const SizedBox(width: 12),
-                    _TarjetaPlatoDestacado(
-                      emoji: '🍕',
-                      nombre: 'Pizza Margherita',
-                      categoria: 'Italiana',
-                      precio: '\$32.000',
-                      rating: '4.7',
-                      onTap: () => _abrirDetallePlato(
-                          '🍕', 'Pizza Margherita', 'Italiana · \$32.000'),
-                    ),
-                    const SizedBox(width: 12),
-                    _TarjetaPlatoDestacado(
-                      emoji: '🍣',
-                      nombre: 'Sushi Mix',
-                      categoria: 'Japonesa',
-                      precio: '\$38.000',
-                      rating: '4.8',
-                      onTap: () => _abrirDetallePlato(
-                          '🍣', 'Sushi Mix', 'Japonesa · \$38.000'),
-                    ),
-                  ],
-                ),
+                child: _cargandoMenu
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: _productos.take(4).length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(width: 12),
+                        itemBuilder: (_, index) {
+                          final p = _productos[index];
+                          return _TarjetaPlatoDestacado(
+                            emoji: p.emoji,
+                            nombre: p.nombre,
+                            categoria: p.categoria ?? '',
+                            precio: p.precioFormateado,
+                            rating: '4.8',
+                            onTap: () => _abrirDetallePlato(p),
+                          );
+                        },
+                      ),
               ),
-
               if (conDatos) ...[
                 const SizedBox(height: 28),
-
-                // ═══════════════════ RECOMENDADOS ═══════════════════
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
@@ -805,44 +760,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
-                    children: [
-                      _TarjetaPlatoRecomendado(
-                        emoji: '🥗',
-                        nombre: 'Ensalada César',
-                        descripcion: 'Lechuga romana, pollo grillado y aderezo césar',
-                        precio: '\$18.500',
-                        tiempo: '15 min',
-                        onTap: () => _abrirDetallePlato('🥗', 'Ensalada César',
-                            'Lechuga romana, pollo grillado y aderezo césar · \$18.500'),
-                        onAdd: () => _toast('Ensalada César agregada al pedido'),
-                      ),
-                      const SizedBox(height: 10),
-                      _TarjetaPlatoRecomendado(
-                        emoji: '🍰',
-                        nombre: 'Tiramisú',
-                        descripcion: 'Postre italiano con café y mascarpone',
-                        precio: '\$12.000',
-                        tiempo: '5 min',
-                        onTap: () => _abrirDetallePlato('🍰', 'Tiramisú',
-                            'Postre italiano con café y mascarpone · \$12.000'),
-                        onAdd: () => _toast('Tiramisú agregado al pedido'),
-                      ),
-                      const SizedBox(height: 10),
-                      _TarjetaPlatoRecomendado(
-                        emoji: '🍹',
-                        nombre: 'Mojito Clásico',
-                        descripcion: 'Ron blanco, hierbabuena y lima',
-                        precio: '\$15.000',
-                        tiempo: '5 min',
-                        onTap: () => _abrirDetallePlato('🍹', 'Mojito Clásico',
-                            'Ron blanco, hierbabuena y lima · \$15.000'),
-                        onAdd: () => _toast('Mojito Clásico agregado al pedido'),
-                      ),
-                    ],
+                    children: _productos.skip(4).take(3).map((p) =>
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _TarjetaPlatoRecomendado(
+                          emoji: p.emoji,
+                          nombre: p.nombre,
+                          descripcion: p.descripcion ?? '',
+                          precio: p.precioFormateado,
+                          tiempo: '15 min',
+                          onTap: () => _abrirDetallePlato(p),
+                          onAdd: () {
+                            Carrito().agregar(p); // ← agrega al carrito
+                            _toast('${p.nombre} agregado al carrito 🛒');
+                          },
+                        ),
+                      )
+                    ).toList(),
                   ),
                 ),
               ],
-
               const SizedBox(height: 24),
             ],
           ),
@@ -852,9 +789,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// WIDGET: Acción rápida (chip grande)
-// ═══════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
+//  WIDGETS PRIVADOS
+// ─────────────────────────────────────────────────────────────
+
 class _AccionRapida extends StatelessWidget {
   final IconData icono;
   final String titulo;
@@ -874,7 +812,8 @@ class _AccionRapida extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        padding:
+            const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         decoration: BoxDecoration(
           color: AppColors.superficie,
           borderRadius: BorderRadius.circular(14),
@@ -1035,7 +974,8 @@ class _ItemBusqueda extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
-                    child: Text(emoji, style: const TextStyle(fontSize: 22))),
+                    child:
+                        Text(emoji, style: const TextStyle(fontSize: 22))),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1070,57 +1010,65 @@ class _ItemMenu extends StatelessWidget {
   final String nombre;
   final String precio;
   final String categoria;
+  final VoidCallback? onTap;
   const _ItemMenu({
     required this.emoji,
     required this.nombre,
     required this.precio,
     required this.categoria,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.superficie,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borde),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.cremaOscura,
-              borderRadius: BorderRadius.circular(10),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.superficie,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borde),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.cremaOscura,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                  child:
+                      Text(emoji, style: const TextStyle(fontSize: 22))),
             ),
-            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(nombre,
-                    style: GoogleFonts.inter(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.cafeOscuro)),
-                const SizedBox(height: 2),
-                Text(categoria,
-                    style: GoogleFonts.inter(
-                        fontSize: 11, color: AppColors.cafeMedio)),
-              ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(nombre,
+                      style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.cafeOscuro)),
+                  const SizedBox(height: 2),
+                  Text(categoria,
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: AppColors.cafeMedio)),
+                ],
+              ),
             ),
-          ),
-          Text(precio,
-              style: GoogleFonts.playfairDisplay(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.terracota)),
-        ],
+            Text(precio,
+                style: GoogleFonts.playfairDisplay(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.terracota)),
+          ],
+        ),
       ),
     );
   }
@@ -1158,7 +1106,9 @@ class _TarjetaPromo extends StatelessWidget {
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 30))),
+            child: Center(
+                child:
+                    Text(emoji, style: const TextStyle(fontSize: 30))),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1213,7 +1163,13 @@ class _FormReserva extends StatefulWidget {
 class _FormReservaState extends State<_FormReserva> {
   int _personas = 2;
   String _hora = '7:30 pm';
-  final _horas = const ['6:00 pm', '7:00 pm', '7:30 pm', '8:00 pm', '9:00 pm'];
+  final _horas = const [
+    '6:00 pm',
+    '7:00 pm',
+    '7:30 pm',
+    '8:00 pm',
+    '9:00 pm'
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1320,9 +1276,6 @@ class _FormReservaState extends State<_FormReserva> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// WIDGET: Tarjeta de Plato Destacado (horizontal)
-// ═══════════════════════════════════════════════════════════
 class _TarjetaPlatoDestacado extends StatelessWidget {
   final String emoji;
   final String nombre;
@@ -1346,92 +1299,89 @@ class _TarjetaPlatoDestacado extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-      width: 170,
-      decoration: BoxDecoration(
-        color: AppColors.superficie,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cafeOscuro.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 100,
-            decoration: BoxDecoration(
-              color: AppColors.terracota.withValues(alpha: 0.12),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+        width: 170,
+        decoration: BoxDecoration(
+          color: AppColors.superficie,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.cafeOscuro.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 48)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 100,
+              decoration: BoxDecoration(
+                color: AppColors.terracota.withValues(alpha: 0.12),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Center(
+                child: Text(emoji, style: const TextStyle(fontSize: 48)),
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.star, color: Colors.amber, size: 14),
-                    const SizedBox(width: 2),
-                    Text(
-                      rating,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.cafeOscuro,
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.star, color: Colors.amber, size: 14),
+                      const SizedBox(width: 2),
+                      Text(
+                        rating,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.cafeOscuro,
+                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    nombre,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cafeOscuro,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  nombre,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.cafeOscuro,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  categoria,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: AppColors.cafeMedio,
+                  const SizedBox(height: 2),
+                  Text(
+                    categoria,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: AppColors.cafeMedio,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  precio,
-                  style: GoogleFonts.playfairDisplay(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.terracota,
+                  const SizedBox(height: 8),
+                  Text(
+                    precio,
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.terracota,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// WIDGET: Tarjeta de Plato Recomendado (horizontal completo)
-// ═══════════════════════════════════════════════════════════
 class _TarjetaPlatoRecomendado extends StatelessWidget {
   final String emoji;
   final String nombre;
@@ -1457,107 +1407,101 @@ class _TarjetaPlatoRecomendado extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.superficie,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cafeOscuro.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              color: AppColors.terracota.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.superficie,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.cafeOscuro.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 36)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: AppColors.terracota.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(emoji, style: const TextStyle(fontSize: 36)),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  nombre,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.cafeOscuro,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  descripcion,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: AppColors.cafeMedio,
-                    height: 1.3,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      precio,
-                      style: GoogleFonts.playfairDisplay(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.terracota,
-                      ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    nombre,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cafeOscuro,
                     ),
-                    const SizedBox(width: 12),
-                    const Icon(
-                      Icons.access_time,
-                      size: 12,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    descripcion,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
                       color: AppColors.cafeMedio,
+                      height: 1.3,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      tiempo,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: AppColors.cafeMedio,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        precio,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.terracota,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 12),
+                      const Icon(Icons.access_time,
+                          size: 12, color: AppColors.cafeMedio),
+                      const SizedBox(width: 4),
+                      Text(
+                        tiempo,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: AppColors.cafeMedio,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.terracota,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onAdd,
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.terracota,
                 borderRadius: BorderRadius.circular(10),
-                child: const Icon(
-                  Icons.add,
-                  color: AppColors.crema,
-                  size: 20,
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onAdd,
+                  borderRadius: BorderRadius.circular(10),
+                  child: const Icon(Icons.add,
+                      color: AppColors.crema, size: 20),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
