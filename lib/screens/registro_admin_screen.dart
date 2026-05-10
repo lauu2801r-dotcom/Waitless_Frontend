@@ -205,9 +205,9 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
                       },
                       decoration: InputDecoration(
                         labelText: 'CÓDIGO DE NEGOCIO',
-                        hintText: 'RESTO2026',
+                        hintText: 'WAITLESS2024',
                         helperText:
-                            'Demo: usa el código RESTO2026 para registrarte',
+                            'Demo: usa el código WAITLESS2024 para registrarte',
                         helperStyle: GoogleFonts.inter(
                             fontSize: 11, color: AppColors.oliva),
                         helperMaxLines: 2,

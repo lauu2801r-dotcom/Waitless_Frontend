@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/usuario.dart';
 import 'auth_repository.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiAuthRepository implements AuthRepository {
   static const String _baseUrl = 'http://10.0.2.2:8000';
@@ -22,6 +23,8 @@ class ApiAuthRepository implements AuthRepository {
 
   Usuario _mapearUsuario(Map<String, dynamic> json) {
     final u = json['usuario'] as Map<String, dynamic>;
+    debugPrint('🔍 ROL QUE LLEGA DEL BACKEND: ${u['rol']}');
+    debugPrint('🔍 RESTAURANTE: ${u['nombre_restaurante']}');
     return Usuario(
       id: u['id'].toString(),
       nombreCompleto: '${u['nombre']} ${u['apellido']}',
@@ -30,6 +33,7 @@ class ApiAuthRepository implements AuthRepository {
       correoVerificado: u['verificado'] as bool,
       fechaRegistro: DateTime.parse(u['creado_en'] as String),
       rol: RolUsuarioX.desdeCodigo(u['rol'] as String),
+      nombreRestaurante: u['nombre_restaurante'] as String?, // ✅ nuevo
       conDatos: true,
     );
   }
@@ -91,6 +95,8 @@ class ApiAuthRepository implements AuthRepository {
           'email': correo,
           'password': password,
           'rol': 'administrador',
+          'nombre_restaurante': nombreRestaurante, // ✅
+          'codigo_negocio': codigoNegocio,         // ✅
         }),
       );
 
