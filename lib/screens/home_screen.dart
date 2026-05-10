@@ -5,6 +5,7 @@ import '../services/auth_controller.dart';
 import '../services/pedido_service.dart';
 import '../utils/app_strings.dart';
 import '../services/menu_service.dart';
+import 'reservas_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -180,11 +181,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ✅ CAMBIO: navega a ReservasScreen en vez de abrir bottom sheet local
   void _abrirReservarMesa() {
-    _abrirHoja(
-      titulo: 'Reservar mesa',
-      altura: 0.7,
-      contenido: const _FormReserva(),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReservasScreen()),
     );
   }
 
@@ -326,7 +327,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Recibe el Producto completo para poder agregarlo al carrito ──
   void _abrirDetallePlato(Producto producto) {
     _abrirHoja(
       titulo: producto.nombre,
@@ -388,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              Carrito().agregar(producto); // ← agrega al carrito
+              Carrito().agregar(producto);
               _toast('${producto.nombre} agregado al carrito 🛒');
             },
             icon: const Icon(Icons.add_shopping_cart, size: 18),
@@ -771,7 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           tiempo: '15 min',
                           onTap: () => _abrirDetallePlato(p),
                           onAdd: () {
-                            Carrito().agregar(p); // ← agrega al carrito
+                            Carrito().agregar(p);
                             _toast('${p.nombre} agregado al carrito 🛒');
                           },
                         ),
@@ -812,8 +812,7 @@ class _AccionRapida extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         decoration: BoxDecoration(
           color: AppColors.superficie,
           borderRadius: BorderRadius.circular(14),
@@ -974,8 +973,8 @@ class _ItemBusqueda extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
-                    child:
-                        Text(emoji, style: const TextStyle(fontSize: 22))),
+                    child: Text(emoji,
+                        style: const TextStyle(fontSize: 22))),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1042,8 +1041,8 @@ class _ItemMenu extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
-                  child:
-                      Text(emoji, style: const TextStyle(fontSize: 22))),
+                  child: Text(emoji,
+                      style: const TextStyle(fontSize: 22))),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1107,8 +1106,8 @@ class _TarjetaPromo extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Center(
-                child:
-                    Text(emoji, style: const TextStyle(fontSize: 30))),
+                child: Text(emoji,
+                    style: const TextStyle(fontSize: 30))),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1150,128 +1149,6 @@ class _TarjetaPromo extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _FormReserva extends StatefulWidget {
-  const _FormReserva();
-  @override
-  State<_FormReserva> createState() => _FormReservaState();
-}
-
-class _FormReservaState extends State<_FormReserva> {
-  int _personas = 2;
-  String _hora = '7:30 pm';
-  final _horas = const [
-    '6:00 pm',
-    '7:00 pm',
-    '7:30 pm',
-    '8:00 pm',
-    '9:00 pm'
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('PERSONAS', style: AppTheme.etiqueta()),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            for (int n = 1; n <= 6; n++) ...[
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _personas = n),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: _personas == n
-                          ? AppColors.terracota
-                          : AppColors.superficie,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: _personas == n
-                              ? AppColors.terracota
-                              : AppColors.borde),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$n${n == 6 ? '+' : ''}',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: _personas == n
-                              ? AppColors.crema
-                              : AppColors.cafeOscuro,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 18),
-        Text('HORA', style: AppTheme.etiqueta()),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _horas
-              .map((h) => GestureDetector(
-                    onTap: () => setState(() => _hora = h),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _hora == h
-                            ? AppColors.terracota
-                            : AppColors.superficie,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: _hora == h
-                                ? AppColors.terracota
-                                : AppColors.borde),
-                      ),
-                      child: Text(h,
-                          style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _hora == h
-                                  ? AppColors.crema
-                                  : AppColors.cafeOscuro)),
-                    ),
-                  ))
-              .toList(),
-        ),
-        const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Reserva confirmada para $_personas ${_personas == 1 ? "persona" : "personas"} a las $_hora',
-                  style: GoogleFonts.inter(color: AppColors.crema),
-                ),
-                backgroundColor: AppColors.oliva,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-          },
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('CONFIRMAR RESERVA'),
-        ),
-      ],
     );
   }
 }
@@ -1334,44 +1211,31 @@ class _TarjetaPlatoDestacado extends StatelessWidget {
                     children: [
                       const Icon(Icons.star, color: Colors.amber, size: 14),
                       const SizedBox(width: 2),
-                      Text(
-                        rating,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.cafeOscuro,
-                        ),
-                      ),
+                      Text(rating,
+                          style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.cafeOscuro)),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    nombre,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.cafeOscuro,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(nombre,
+                      style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.cafeOscuro),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 2),
-                  Text(
-                    categoria,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppColors.cafeMedio,
-                    ),
-                  ),
+                  Text(categoria,
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: AppColors.cafeMedio)),
                   const SizedBox(height: 8),
-                  Text(
-                    precio,
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.terracota,
-                    ),
-                  ),
+                  Text(precio,
+                      style: GoogleFonts.playfairDisplay(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.terracota)),
                 ],
               ),
             ),
@@ -1437,47 +1301,34 @@ class _TarjetaPlatoRecomendado extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    nombre,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.cafeOscuro,
-                    ),
-                  ),
+                  Text(nombre,
+                      style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.cafeOscuro)),
                   const SizedBox(height: 4),
-                  Text(
-                    descripcion,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppColors.cafeMedio,
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(descripcion,
+                      style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: AppColors.cafeMedio,
+                          height: 1.3),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Text(
-                        precio,
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.terracota,
-                        ),
-                      ),
+                      Text(precio,
+                          style: GoogleFonts.playfairDisplay(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.terracota)),
                       const SizedBox(width: 12),
                       const Icon(Icons.access_time,
                           size: 12, color: AppColors.cafeMedio),
                       const SizedBox(width: 4),
-                      Text(
-                        tiempo,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: AppColors.cafeMedio,
-                        ),
-                      ),
+                      Text(tiempo,
+                          style: GoogleFonts.inter(
+                              fontSize: 11, color: AppColors.cafeMedio)),
                     ],
                   ),
                 ],
