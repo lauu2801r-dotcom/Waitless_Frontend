@@ -43,6 +43,20 @@ class MesaService {
     };
   }
 
+  /// Todas las mesas (activas e inactivas) — usa GET /mesas/
+  Future<List<MesaModel>> todasLasMesas() async {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/mesas/'),
+      headers: await _headers(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => MesaModel.fromJson(e)).toList();
+    }
+    throw Exception('Error al cargar mesas');
+  }
+
+  /// Solo mesas disponibles — usa GET /mesas/disponibles
   Future<List<MesaModel>> mesasDisponibles() async {
     final response = await http.get(
       Uri.parse('${ApiConfig.baseUrl}/mesas/disponibles'),

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'menu_service.dart'; // Para Producto (ItemCarrito)
+import 'menu_service.dart';
 import 'api_config.dart';
 
 // ─────────────────────────────────────────────────────────────
@@ -38,7 +38,6 @@ extension EstadoPedidoApiX on EstadoPedidoApi {
     }
   }
 
-  /// Progreso para la barra lineal (0.0 – 1.0)
   double get progreso {
     switch (this) {
       case EstadoPedidoApi.pendiente:      return 0.15;
@@ -63,6 +62,7 @@ extension EstadoPedidoApiX on EstadoPedidoApi {
 class ItemPedidoApi {
   final int id;
   final int productoId;
+  final String? nombreProducto; // ← NUEVO
   final int cantidad;
   final double precioUnitario;
   final double subtotal;
@@ -71,6 +71,7 @@ class ItemPedidoApi {
   const ItemPedidoApi({
     required this.id,
     required this.productoId,
+    this.nombreProducto, // ← NUEVO
     required this.cantidad,
     required this.precioUnitario,
     required this.subtotal,
@@ -80,6 +81,7 @@ class ItemPedidoApi {
   factory ItemPedidoApi.fromJson(Map<String, dynamic> json) => ItemPedidoApi(
         id: json['id'] as int,
         productoId: json['producto_id'] as int,
+        nombreProducto: json['nombre_producto'] as String?, // ← NUEVO
         cantidad: json['cantidad'] as int,
         precioUnitario: (json['precio_unitario'] as num).toDouble(),
         subtotal: (json['subtotal'] as num).toDouble(),
@@ -138,7 +140,7 @@ class PedidoApi {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  CARRITO (estado en memoria, notifica a listeners)
+//  CARRITO
 // ─────────────────────────────────────────────────────────────
 
 class ItemCarrito {
@@ -156,7 +158,6 @@ class ItemCarrito {
 }
 
 class Carrito extends ChangeNotifier {
-  // Singleton
   static final Carrito _instance = Carrito._();
   factory Carrito() => _instance;
   Carrito._();
@@ -164,17 +165,14 @@ class Carrito extends ChangeNotifier {
   final List<ItemCarrito> _items = [];
 
   List<ItemCarrito> get items => List.unmodifiable(_items);
-
   int get totalItems => _items.fold(0, (s, i) => s + i.cantidad);
-
   double get total => _items.fold(0.0, (s, i) => s + i.subtotal);
+  bool get estaVacio => _items.isEmpty;
 
   String get totalFormateado {
     final t = total.toInt();
     return '\$${t.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
   }
-
-  bool get estaVacio => _items.isEmpty;
 
   void agregar(Producto producto, {int cantidad = 1}) {
     final idx = _items.indexWhere((i) => i.producto.id == producto.id);
@@ -232,7 +230,7 @@ class PedidoError<T> extends PedidoResultado<T> {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  SERVICIO DE PEDIDOS (llamadas HTTP)
+//  SERVICIO DE PEDIDOS
 // ─────────────────────────────────────────────────────────────
 
 class PedidoService {
@@ -247,7 +245,6 @@ class PedidoService {
     };
   }
 
-  /// Crear pedido — requiere mesa_id y lista de items del carrito
   static Future<PedidoResultado<PedidoApi>> crearPedido({
     required int mesaId,
     required List<ItemCarrito> items,
@@ -288,7 +285,6 @@ class PedidoService {
     }
   }
 
-  /// Obtener mis pedidos (cliente)
   static Future<PedidoResultado<List<PedidoApi>>> misPedidos() async {
     try {
       final headers = await _headers();
@@ -306,7 +302,6 @@ class PedidoService {
     }
   }
 
-  /// Obtener todos los pedidos (admin)
   static Future<PedidoResultado<List<PedidoApi>>> todosPedidos() async {
     try {
       final headers = await _headers();
@@ -324,7 +319,6 @@ class PedidoService {
     }
   }
 
-  /// Obtener pedidos activos (admin — cocina)
   static Future<PedidoResultado<List<PedidoApi>>> pedidosActivos() async {
     try {
       final headers = await _headers();
@@ -342,7 +336,6 @@ class PedidoService {
     }
   }
 
-  /// Actualizar estado de un pedido (admin)
   static Future<PedidoResultado<PedidoApi>> actualizarEstado({
     required int pedidoId,
     required EstadoPedidoApi nuevoEstado,
@@ -366,7 +359,6 @@ class PedidoService {
     }
   }
 
-  /// Cancelar un pedido (cliente)
   static Future<PedidoResultado<String>> cancelarPedido(int pedidoId) async {
     try {
       final headers = await _headers();
