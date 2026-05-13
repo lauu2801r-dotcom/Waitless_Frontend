@@ -6,8 +6,6 @@ import '../services/pedido_service.dart';
 import '../utils/app_strings.dart';
 import '../services/menu_service.dart';
 import 'reservas_screen.dart';
-import 'ver_menu_card.dart';
-import 'crear_pedido.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
