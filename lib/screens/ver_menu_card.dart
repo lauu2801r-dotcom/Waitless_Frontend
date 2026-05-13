@@ -1,29 +1,4 @@
-// ─────────────────────────────────────────────────────────────
-//  VER MENÚ CARD — agregar en home_screen.dart
-//  Muestra todos los productos con filtro por categoría,
-//  buscador interno y detalle individual con "Agregar al carrito"
-// ─────────────────────────────────────────────────────────────
-//
-//  INSTRUCCIONES DE INTEGRACIÓN:
-//  1. Importa este archivo en home_screen.dart
-//  2. Agrega _VerMenuCard como primera tarjeta en las acciones
-//     rápidas (antes de Reservar mesa), o como sección dedicada.
-//  3. Llama a _abrirVerMenu() desde el onTap de la tarjeta.
-//
-//  UBICACIÓN SUGERIDA en home_screen.dart → método build():
-//  Añade ANTES de las acciones rápidas existentes:
-//
-//    _TarjetaAccionGrande(
-//      emoji: '🍽️',
-//      titulo: 'Ver Menú',
-//      subtitulo: 'Todos nuestros platos',
-//      color: AppColors.terracota,
-//      onTap: _abrirVerMenu,
-//    ),
-//
-//  Y el método:
-//    void _abrirVerMenu() => VerMenuSheet.mostrar(context, _productos, _cargandoMenu);
-// ─────────────────────────────────────────────────────────────
+
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';

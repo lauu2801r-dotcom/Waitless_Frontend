@@ -7,7 +7,7 @@ import '../utils/app_strings.dart';
 import '../services/menu_service.dart';
 import 'reservas_screen.dart';
 import 'ver_menu_card.dart';
-import 'crea_pedido_screen.dart';
+import 'crear_pedido.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _categoriaSeleccionada = 'Todos';
   List<Producto> _productos = [];
-  bool _cargandoMenu = false;
+  bool _cargandoMenu = true;
 
   final List<Map<String, dynamic>> _categorias = [
     {'nombre': 'Todos', 'emoji': '🍽️'},

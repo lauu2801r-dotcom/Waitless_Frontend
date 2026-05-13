@@ -9,45 +9,33 @@ class _ItemBorrador {
   final Producto producto;
   int cantidad;
   String? notas;
-
-  _ItemBorrador({
-    required this.producto,
-    this.cantidad = 1,
-    this.notas,
-  });
-
+  _ItemBorrador({required this.producto, this.cantidad = 1, this.notas});
   double get subtotal => producto.precio * cantidad;
 }
 
 enum TipoEntrega { restaurante, domicilio }
 
 class CrearPedidoScreen extends StatefulWidget {
-  final List<Producto> productosIniciales;
-
-  const CrearPedidoScreen({
-    super.key,
-    this.productosIniciales = const [],
-  });
+  const CrearPedidoScreen({super.key});
 
   @override
   State<CrearPedidoScreen> createState() => _CrearPedidoScreenState();
 }
 
-class _CrearPedidoScreenState extends State<CrearPedidoScreen>
-    with SingleTickerProviderStateMixin {
+class _CrearPedidoScreenState extends State<CrearPedidoScreen> {
   List<Producto> _productos = [];
-  bool _cargandoMenu = false;
+  bool _cargando = true;
+  int _tabActivo = 0;
 
   final List<_ItemBorrador> _borrador = [];
   TipoEntrega _tipoEntrega = TipoEntrega.restaurante;
   String _direccion = '';
+  bool _editandoDireccion = false;
 
-  late TabController _tabController;
   String _categoriaActiva = 'Todos';
   String _busqueda = '';
   final TextEditingController _busquedaCtrl = TextEditingController();
   final TextEditingController _direccionCtrl = TextEditingController();
-  bool _editandoDireccion = false;
 
   final List<Map<String, String>> _categorias = [
     {'nombre': 'Todos', 'emoji': '🍽️'},
@@ -73,11 +61,9 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
     }
     if (_busqueda.isNotEmpty) {
       final q = _busqueda.toLowerCase();
-      lista = lista
-          .where((p) =>
-              p.nombre.toLowerCase().contains(q) ||
-              (p.categoria?.toLowerCase().contains(q) ?? false))
-          .toList();
+      lista = lista.where((p) =>
+          p.nombre.toLowerCase().contains(q) ||
+          (p.categoria?.toLowerCase().contains(q) ?? false)).toList();
     }
     return lista;
   }
@@ -85,31 +71,23 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    if (widget.productosIniciales.isNotEmpty) {
-      _productos = widget.productosIniciales;
-    } else {
-      _cargarMenu();
-    }
+    _cargarMenu();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _busquedaCtrl.dispose();
     _direccionCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _cargarMenu() async {
-    setState(() => _cargandoMenu = true);
-    debugPrint('🍽️ Iniciando carga de menú...');
+    setState(() => _cargando = true);
     final productos = await MenuService.obtenerMenu();
-    debugPrint('🍽️ Productos cargados: ${productos.length}');
     if (mounted) {
       setState(() {
         _productos = productos;
-        _cargandoMenu = false;
+        _cargando = false;
       });
     }
   }
@@ -138,18 +116,24 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
     });
   }
 
+  void _eliminarItem(int productoId) {
+    final idx = _borrador.indexWhere((i) => i.producto.id == productoId);
+    if (idx < 0) return;
+    final nombre = _borrador[idx].producto.nombre;
+    setState(() => _borrador.removeAt(idx));
+    _snack('$nombre eliminado del pedido');
+  }
+
   void _editarNotas(int productoId) {
     final idx = _borrador.indexWhere((i) => i.producto.id == productoId);
     if (idx < 0) return;
     final notasCtrl = TextEditingController(text: _borrador[idx].notas ?? '');
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => Padding(
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Container(
           decoration: const BoxDecoration(
             color: AppColors.crema,
@@ -160,20 +144,15 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Notas para ${_borrador[idx].producto.nombre}',
-                style: AppTheme.titulo(size: 18),
-              ),
+              Text('Notas para ${_borrador[idx].producto.nombre}',
+                  style: AppTheme.titulo(size: 18)),
               const SizedBox(height: 14),
               TextField(
                 controller: notasCtrl,
                 maxLines: 3,
                 autofocus: true,
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.cafeOscuro),
-                decoration: const InputDecoration(
-                  hintText: 'Sin cebolla, punto medio, extra queso...',
-                ),
+                style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeOscuro),
+                decoration: const InputDecoration(hintText: 'Sin cebolla, punto medio...'),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -195,29 +174,18 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
     );
   }
 
-  void _eliminarItem(int productoId) {
-    final idx = _borrador.indexWhere((i) => i.producto.id == productoId);
-    if (idx < 0) return;
-    final nombre = _borrador[idx].producto.nombre;
-    setState(() => _borrador.removeAt(idx));
-    _snack('$nombre eliminado del pedido');
-  }
-
   void _limpiarBorrador() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Limpiar pedido', style: AppTheme.titulo(size: 18)),
-        content: Text(
-          '¿Eliminar todos los productos del borrador?',
-          style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio),
-        ),
+        content: Text('¿Eliminar todos los productos del borrador?',
+            style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancelar',
-                style: GoogleFonts.inter(color: AppColors.cafeMedio)),
+            child: Text('Cancelar', style: GoogleFonts.inter(color: AppColors.cafeMedio)),
           ),
           TextButton(
             onPressed: () {
@@ -227,8 +195,7 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
             },
             child: Text('Limpiar',
                 style: GoogleFonts.inter(
-                    color: AppColors.terracota,
-                    fontWeight: FontWeight.w600)),
+                    color: AppColors.terracota, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -240,24 +207,20 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
       _snack('Agrega al menos un producto', esError: true);
       return;
     }
-
     final carrito = Carrito();
     carrito.limpiar();
     for (final item in _borrador) {
       carrito.agregar(item.producto, cantidad: item.cantidad);
     }
-
     final tipoApi = _tipoEntrega == TipoEntrega.domicilio
         ? TipoEntregaApi.domicilio
         : TipoEntregaApi.restaurante;
-
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CarritoScreen(
           tipoEntrega: tipoApi,
-          direccionDomicilio:
-              _tipoEntrega == TipoEntrega.domicilio ? _direccion : null,
+          direccionDomicilio: _tipoEntrega == TipoEntrega.domicilio ? _direccion : null,
         ),
       ),
     ).then((_) {
@@ -270,23 +233,23 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
 
   void _snack(String msg, {bool esError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            Text(msg, style: GoogleFonts.inter(color: AppColors.crema)),
-        backgroundColor:
-            esError ? AppColors.terracota : AppColors.cafeOscuro,
-        behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: GoogleFonts.inter(color: AppColors.crema)),
+      backgroundColor: esError ? AppColors.terracota : AppColors.cafeOscuro,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      duration: const Duration(seconds: 2),
+    ));
   }
 
   int _cantidadEnBorrador(int productoId) {
     final idx = _borrador.indexWhere((i) => i.producto.id == productoId);
     return idx >= 0 ? _borrador[idx].cantidad : 0;
+  }
+
+  String _fmt(double precio) {
+    final t = precio.toInt();
+    return '\$${t.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
   }
 
   @override
@@ -297,8 +260,7 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
         backgroundColor: AppColors.crema,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: AppColors.cafeOscuro, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.cafeOscuro, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Crea tu Pedido', style: AppTheme.titulo(size: 20)),
@@ -306,97 +268,40 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
           if (!_borradorVacio)
             TextButton.icon(
               onPressed: _limpiarBorrador,
-              icon: const Icon(Icons.delete_outline,
-                  size: 16, color: AppColors.terracota),
+              icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.terracota),
               label: Text('Limpiar',
-                  style: GoogleFonts.inter(
-                      fontSize: 13, color: AppColors.terracota)),
+                  style: GoogleFonts.inter(fontSize: 13, color: AppColors.terracota)),
             ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.terracota,
-          unselectedLabelColor: AppColors.cafeMedio,
-          indicatorColor: AppColors.terracota,
-          indicatorWeight: 2.5,
-          labelStyle:
-              GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
-          tabs: [
-            const Tab(text: 'ELEGIR PRODUCTOS'),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('MI PEDIDO'),
-                  if (_totalItems > 0) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.terracota,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text('$_totalItems',
-                          style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.crema)),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _cargandoMenu
-              ? const Center(
-                  child: CircularProgressIndicator(
-                      color: AppColors.terracota, strokeWidth: 2))
-              : _TabElegirProductos(
-                  categorias: _categorias,
-                  categoriaActiva: _categoriaActiva,
-                  onCategoriaChanged: (c) =>
-                      setState(() => _categoriaActiva = c),
-                  busquedaCtrl: _busquedaCtrl,
-                  busqueda: _busqueda,
-                  onBusquedaChanged: (v) => setState(() => _busqueda = v),
-                  productosFiltrados: _productosFiltrados,
-                  cantidadEnBorrador: _cantidadEnBorrador,
-                  onAgregar: _agregarProducto,
-                  onActualizar: _actualizarCantidad,
-                ),
-          _TabMiPedido(
-            borrador: _borrador,
-            tipoEntrega: _tipoEntrega,
-            direccion: _direccion,
-            editandoDireccion: _editandoDireccion,
-            direccionCtrl: _direccionCtrl,
-            onTipoEntregaChanged: (t) => setState(() => _tipoEntrega = t),
-            onEditarDireccion: () =>
-                setState(() => _editandoDireccion = true),
-            onGuardarDireccion: () {
-              setState(() {
-                _direccion = _direccionCtrl.text.trim();
-                _editandoDireccion = false;
-              });
-            },
-            onIncrementar: (id) {
-              final idx = _borrador.indexWhere((i) => i.producto.id == id);
-              if (idx >= 0)
-                _actualizarCantidad(id, _borrador[idx].cantidad + 1);
-            },
-            onDecrementar: (id) {
-              final idx = _borrador.indexWhere((i) => i.producto.id == id);
-              if (idx >= 0)
-                _actualizarCantidad(id, _borrador[idx].cantidad - 1);
-            },
-            onEliminar: _eliminarItem,
-            onEditarNotas: _editarNotas,
+          // ── Tabs manuales
+          Row(
+            children: [
+              _TabBtn(
+                label: 'ELEGIR PRODUCTOS',
+                activo: _tabActivo == 0,
+                onTap: () => setState(() => _tabActivo = 0),
+              ),
+              _TabBtn(
+                label: 'MI PEDIDO',
+                badge: _totalItems > 0 ? '$_totalItems' : null,
+                activo: _tabActivo == 1,
+                onTap: () => setState(() => _tabActivo = 1),
+              ),
+            ],
+          ),
+          const Divider(height: 1, color: AppColors.borde),
+          // ── Contenido con IndexedStack
+          Expanded(
+            child: IndexedStack(
+              index: _tabActivo,
+              children: [
+                _buildTabProductos(),
+                _buildTabMiPedido(),
+              ],
+            ),
           ),
         ],
       ),
@@ -416,11 +321,8 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
           child: _borradorVacio
               ? Center(
                   child: Text(
-                    _cargandoMenu
-                        ? 'Cargando menú...'
-                        : 'Agrega productos del menú para comenzar',
-                    style: GoogleFonts.inter(
-                        fontSize: 13, color: AppColors.cafeMedio),
+                    _cargando ? 'Cargando menú...' : 'Agrega productos del menú para comenzar',
+                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio),
                   ),
                 )
               : Row(
@@ -429,24 +331,20 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('$_totalItems productos',
-                            style: AppTheme.etiqueta()),
-                        Text(
-                          _totalFormateado,
-                          style: GoogleFonts.playfairDisplay(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.terracota,
-                          ),
-                        ),
+                        Text('$_totalItems productos', style: AppTheme.etiqueta()),
+                        Text(_totalFormateado,
+                            style: GoogleFonts.playfairDisplay(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.terracota,
+                            )),
                       ],
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: _enviarAlCarrito,
-                        icon: const Icon(Icons.shopping_cart_outlined,
-                            size: 18),
+                        icon: const Icon(Icons.shopping_cart_outlined, size: 18),
                         label: const Text('ENVIAR AL CARRITO'),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -461,61 +359,31 @@ class _CrearPedidoScreenState extends State<CrearPedidoScreen>
       ),
     );
   }
-}
 
-// ─────────────────────────────────────────────────────────────
-//  TAB 1 — ELEGIR PRODUCTOS
-// ─────────────────────────────────────────────────────────────
-
-class _TabElegirProductos extends StatelessWidget {
-  final List<Map<String, String>> categorias;
-  final String categoriaActiva;
-  final ValueChanged<String> onCategoriaChanged;
-  final TextEditingController busquedaCtrl;
-  final String busqueda;
-  final ValueChanged<String> onBusquedaChanged;
-  final List<Producto> productosFiltrados;
-  final int Function(int productoId) cantidadEnBorrador;
-  final void Function(Producto) onAgregar;
-  final void Function(int productoId, int nuevaCantidad) onActualizar;
-
-  const _TabElegirProductos({
-    required this.categorias,
-    required this.categoriaActiva,
-    required this.onCategoriaChanged,
-    required this.busquedaCtrl,
-    required this.busqueda,
-    required this.onBusquedaChanged,
-    required this.productosFiltrados,
-    required this.cantidadEnBorrador,
-    required this.onAgregar,
-    required this.onActualizar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildTabProductos() {
+    if (_cargando) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.terracota, strokeWidth: 2),
+      );
+    }
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
           child: TextField(
-            controller: busquedaCtrl,
-            onChanged: onBusquedaChanged,
-            style: GoogleFonts.inter(
-                fontSize: 13, color: AppColors.cafeOscuro),
+            controller: _busquedaCtrl,
+            onChanged: (v) => setState(() => _busqueda = v),
+            style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeOscuro),
             decoration: InputDecoration(
               hintText: 'Buscar plato...',
-              hintStyle: GoogleFonts.inter(
-                  fontSize: 13, color: AppColors.cafeMedio),
-              prefixIcon: const Icon(Icons.search,
-                  color: AppColors.cafeMedio, size: 20),
-              suffixIcon: busqueda.isNotEmpty
+              hintStyle: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio),
+              prefixIcon: const Icon(Icons.search, color: AppColors.cafeMedio, size: 20),
+              suffixIcon: _busqueda.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: AppColors.cafeMedio, size: 18),
+                      icon: const Icon(Icons.clear, color: AppColors.cafeMedio, size: 18),
                       onPressed: () {
-                        busquedaCtrl.clear();
-                        onBusquedaChanged('');
+                        _busquedaCtrl.clear();
+                        setState(() => _busqueda = '');
                       },
                     )
                   : null,
@@ -527,38 +395,32 @@ class _TabElegirProductos extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: categorias.length,
+            itemCount: _categorias.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (_, i) {
-              final cat = categorias[i];
-              final activa = categoriaActiva == cat['nombre'];
+              final cat = _categorias[i];
+              final activa = _categoriaActiva == cat['nombre'];
               return GestureDetector(
-                onTap: () => onCategoriaChanged(cat['nombre']!),
+                onTap: () => setState(() => _categoriaActiva = cat['nombre']!),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: activa
-                        ? AppColors.terracota
-                        : AppColors.superficie,
+                    color: activa ? AppColors.terracota : AppColors.superficie,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color:
-                            activa ? AppColors.terracota : AppColors.borde),
+                        color: activa ? AppColors.terracota : AppColors.borde),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(cat['emoji']!,
-                          style: const TextStyle(fontSize: 14)),
+                      Text(cat['emoji']!, style: const TextStyle(fontSize: 14)),
                       const SizedBox(width: 6),
                       Text(cat['nombre']!,
                           style: GoogleFonts.inter(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: activa
-                                  ? AppColors.crema
-                                  : AppColors.cafeOscuro)),
+                              color: activa ? AppColors.crema : AppColors.cafeOscuro)),
                     ],
                   ),
                 ),
@@ -569,24 +431,23 @@ class _TabElegirProductos extends StatelessWidget {
         const SizedBox(height: 12),
         const Divider(height: 1, color: AppColors.borde),
         Expanded(
-          child: productosFiltrados.isEmpty
+          child: _productosFiltrados.isEmpty
               ? Center(
                   child: Text('Sin resultados',
-                      style: GoogleFonts.inter(
-                          fontSize: 14, color: AppColors.cafeMedio)))
+                      style: GoogleFonts.inter(fontSize: 14, color: AppColors.cafeMedio)))
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                  itemCount: productosFiltrados.length,
+                  itemCount: _productosFiltrados.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (_, i) {
-                    final p = productosFiltrados[i];
-                    final cantidad = cantidadEnBorrador(p.id);
-                    return _TarjetaProductoSeleccionable(
+                    final p = _productosFiltrados[i];
+                    final cantidad = _cantidadEnBorrador(p.id);
+                    return _TarjetaProducto(
                       producto: p,
                       cantidad: cantidad,
-                      onAgregar: () => onAgregar(p),
-                      onIncrementar: () => onActualizar(p.id, cantidad + 1),
-                      onDecrementar: () => onActualizar(p.id, cantidad - 1),
+                      onAgregar: () => _agregarProducto(p),
+                      onIncrementar: () => _actualizarCantidad(p.id, cantidad + 1),
+                      onDecrementar: () => _actualizarCantidad(p.id, cantidad - 1),
                     );
                   },
                 ),
@@ -594,49 +455,9 @@ class _TabElegirProductos extends StatelessWidget {
       ],
     );
   }
-}
 
-// ─────────────────────────────────────────────────────────────
-//  TAB 2 — MI PEDIDO
-// ─────────────────────────────────────────────────────────────
-
-class _TabMiPedido extends StatelessWidget {
-  final List<_ItemBorrador> borrador;
-  final TipoEntrega tipoEntrega;
-  final String direccion;
-  final bool editandoDireccion;
-  final TextEditingController direccionCtrl;
-  final ValueChanged<TipoEntrega> onTipoEntregaChanged;
-  final VoidCallback onEditarDireccion;
-  final VoidCallback onGuardarDireccion;
-  final void Function(int) onIncrementar;
-  final void Function(int) onDecrementar;
-  final void Function(int) onEliminar;
-  final void Function(int) onEditarNotas;
-
-  const _TabMiPedido({
-    required this.borrador,
-    required this.tipoEntrega,
-    required this.direccion,
-    required this.editandoDireccion,
-    required this.direccionCtrl,
-    required this.onTipoEntregaChanged,
-    required this.onEditarDireccion,
-    required this.onGuardarDireccion,
-    required this.onIncrementar,
-    required this.onDecrementar,
-    required this.onEliminar,
-    required this.onEditarNotas,
-  });
-
-  String _fmt(double precio) {
-    final t = precio.toInt();
-    return '\$${t.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (borrador.isEmpty) {
+  Widget _buildTabMiPedido() {
+    if (_borrador.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -654,16 +475,13 @@ class _TabMiPedido extends StatelessWidget {
                     color: AppColors.terracota, size: 38),
               ),
               const SizedBox(height: 20),
-              Text('Tu pedido está vacío',
-                  style: AppTheme.titulo(size: 20)),
+              Text('Tu pedido está vacío', style: AppTheme.titulo(size: 20)),
               const SizedBox(height: 8),
               Text(
                 'Ve a "Elegir Productos" y agrega lo que quieras',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.cafeMedio,
-                    height: 1.5),
+                    fontSize: 13, color: AppColors.cafeMedio, height: 1.5),
               ),
             ],
           ),
@@ -685,9 +503,9 @@ class _TabMiPedido extends StatelessWidget {
                   icono: Icons.table_restaurant_outlined,
                   titulo: 'En el restaurante',
                   subtitulo: 'Escoge tu mesa',
-                  seleccionado: tipoEntrega == TipoEntrega.restaurante,
+                  seleccionado: _tipoEntrega == TipoEntrega.restaurante,
                   color: AppColors.terracota,
-                  onTap: () => onTipoEntregaChanged(TipoEntrega.restaurante),
+                  onTap: () => setState(() => _tipoEntrega = TipoEntrega.restaurante),
                 ),
               ),
               const SizedBox(width: 10),
@@ -696,24 +514,24 @@ class _TabMiPedido extends StatelessWidget {
                   icono: Icons.delivery_dining_outlined,
                   titulo: 'A domicilio',
                   subtitulo: '30–45 min',
-                  seleccionado: tipoEntrega == TipoEntrega.domicilio,
+                  seleccionado: _tipoEntrega == TipoEntrega.domicilio,
                   color: AppColors.oliva,
-                  onTap: () => onTipoEntregaChanged(TipoEntrega.domicilio),
+                  onTap: () => setState(() => _tipoEntrega = TipoEntrega.domicilio),
                 ),
               ),
             ],
           ),
-          if (tipoEntrega == TipoEntrega.domicilio) ...[
+          if (_tipoEntrega == TipoEntrega.domicilio) ...[
             const SizedBox(height: 16),
             Text('DIRECCIÓN DE ENTREGA', style: AppTheme.etiqueta()),
             const SizedBox(height: 8),
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 250),
-              crossFadeState: editandoDireccion
+              crossFadeState: _editandoDireccion
                   ? CrossFadeState.showSecond
                   : CrossFadeState.showFirst,
               firstChild: GestureDetector(
-                onTap: onEditarDireccion,
+                onTap: () => setState(() => _editandoDireccion = true),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -723,20 +541,15 @@ class _TabMiPedido extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.location_on,
-                          color: AppColors.terracota, size: 20),
+                      const Icon(Icons.location_on, color: AppColors.terracota, size: 20),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          direccion.isEmpty
-                              ? 'Toca para ingresar tu dirección'
-                              : direccion,
+                          _direccion.isEmpty ? 'Toca para ingresar tu dirección' : _direccion,
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
-                            color: direccion.isEmpty
-                                ? AppColors.cafeMedio
-                                : AppColors.cafeOscuro,
+                            color: _direccion.isEmpty ? AppColors.cafeMedio : AppColors.cafeOscuro,
                           ),
                         ),
                       ),
@@ -752,10 +565,9 @@ class _TabMiPedido extends StatelessWidget {
               secondChild: Column(
                 children: [
                   TextField(
-                    controller: direccionCtrl,
+                    controller: _direccionCtrl,
                     autofocus: true,
-                    style: GoogleFonts.inter(
-                        fontSize: 13, color: AppColors.cafeOscuro),
+                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeOscuro),
                     decoration: const InputDecoration(
                       hintText: 'Ej: Cra. 15 #100-20, Apto 301',
                       prefixIcon: Icon(Icons.edit_location_alt_outlined,
@@ -766,10 +578,14 @@ class _TabMiPedido extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: onGuardarDireccion,
+                      onPressed: () {
+                        setState(() {
+                          _direccion = _direccionCtrl.text.trim();
+                          _editandoDireccion = false;
+                        });
+                      },
                       style: ElevatedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12)),
                       child: const Text('GUARDAR DIRECCIÓN'),
                     ),
                   ),
@@ -782,18 +598,17 @@ class _TabMiPedido extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('PRODUCTOS SELECCIONADOS', style: AppTheme.etiqueta()),
-              Text('${borrador.fold(0, (s, i) => s + i.cantidad)} ítems',
-                  style: GoogleFonts.inter(
-                      fontSize: 11, color: AppColors.cafeMedio)),
+              Text('${_borrador.fold(0, (s, i) => s + i.cantidad)} ítems',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.cafeMedio)),
             ],
           ),
           const SizedBox(height: 12),
-          ...borrador.map((item) => _ItemBorradorWidget(
+          ..._borrador.map((item) => _ItemBorradorWidget(
                 item: item,
-                onIncrementar: () => onIncrementar(item.producto.id),
-                onDecrementar: () => onDecrementar(item.producto.id),
-                onEliminar: () => onEliminar(item.producto.id),
-                onEditarNotas: () => onEditarNotas(item.producto.id),
+                onIncrementar: () => _actualizarCantidad(item.producto.id, item.cantidad + 1),
+                onDecrementar: () => _actualizarCantidad(item.producto.id, item.cantidad - 1),
+                onEliminar: () => _eliminarItem(item.producto.id),
+                onEditarNotas: () => _editarNotas(item.producto.id),
                 subtotalFormateado: _fmt(item.subtotal),
               )),
           const SizedBox(height: 20),
@@ -808,15 +623,12 @@ class _TabMiPedido extends StatelessWidget {
               children: [
                 _FilaTotal(
                   label: 'Subtotal',
-                  valor: _fmt(borrador.fold(0.0, (s, i) => s + i.subtotal)),
+                  valor: _fmt(_borrador.fold(0.0, (s, i) => s + i.subtotal)),
                   esNegrita: false,
                 ),
-                if (tipoEntrega == TipoEntrega.domicilio) ...[
+                if (_tipoEntrega == TipoEntrega.domicilio) ...[
                   const SizedBox(height: 8),
-                  const _FilaTotal(
-                      label: 'Domicilio',
-                      valor: '\$5.000',
-                      esNegrita: false),
+                  const _FilaTotal(label: 'Domicilio', valor: '\$5.000', esNegrita: false),
                 ],
                 const SizedBox(height: 8),
                 const Divider(color: AppColors.borde),
@@ -824,8 +636,8 @@ class _TabMiPedido extends StatelessWidget {
                 _FilaTotal(
                   label: 'TOTAL',
                   valor: _fmt(
-                    borrador.fold(0.0, (s, i) => s + i.subtotal) +
-                        (tipoEntrega == TipoEntrega.domicilio ? 5000.0 : 0.0),
+                    _borrador.fold(0.0, (s, i) => s + i.subtotal) +
+                        (_tipoEntrega == TipoEntrega.domicilio ? 5000.0 : 0.0),
                   ),
                   esNegrita: true,
                 ),
@@ -841,16 +653,13 @@ class _TabMiPedido extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.insights_outlined,
-                    color: AppColors.infoTexto, size: 20),
+                const Icon(Icons.insights_outlined, color: AppColors.infoTexto, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Al confirmar tu pedido, el panel Momento se actualizará con el tiempo estimado de espera.',
                     style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppColors.infoTexto,
-                        height: 1.4),
+                        fontSize: 12, color: AppColors.infoTexto, height: 1.4),
                   ),
                 ),
               ],
@@ -862,18 +671,70 @@ class _TabMiPedido extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  WIDGETS AUXILIARES
-// ─────────────────────────────────────────────────────────────
+// ── Tab button manual
+class _TabBtn extends StatelessWidget {
+  final String label;
+  final String? badge;
+  final bool activo;
+  final VoidCallback onTap;
 
-class _TarjetaProductoSeleccionable extends StatelessWidget {
+  const _TabBtn({required this.label, required this.activo, required this.onTap, this.badge});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.crema,
+            border: Border(
+              bottom: BorderSide(
+                color: activo ? AppColors.terracota : Colors.transparent,
+                width: 2.5,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(label,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: activo ? AppColors.terracota : AppColors.cafeMedio,
+                  )),
+              if (badge != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.terracota,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(badge!,
+                      style: GoogleFonts.inter(
+                          fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.crema)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Tarjeta producto
+class _TarjetaProducto extends StatelessWidget {
   final Producto producto;
   final int cantidad;
   final VoidCallback onAgregar;
   final VoidCallback onIncrementar;
   final VoidCallback onDecrementar;
 
-  const _TarjetaProductoSeleccionable({
+  const _TarjetaProducto({
     required this.producto,
     required this.cantidad,
     required this.onAgregar,
@@ -906,9 +767,7 @@ class _TarjetaProductoSeleccionable extends StatelessWidget {
               color: AppColors.terracota.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Center(
-                child: Text(producto.emoji,
-                    style: const TextStyle(fontSize: 28))),
+            child: Center(child: Text(producto.emoji, style: const TextStyle(fontSize: 28))),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -925,8 +784,7 @@ class _TarjetaProductoSeleccionable extends StatelessWidget {
                   Text(producto.descripcion!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                          fontSize: 11, color: AppColors.cafeMedio)),
+                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.cafeMedio)),
                 ],
                 const SizedBox(height: 6),
                 Text(producto.precioFormateado,
@@ -942,9 +800,7 @@ class _TarjetaProductoSeleccionable extends StatelessWidget {
               children: [
                 _BtnCantidad(
                   icono: cantidad == 1 ? Icons.delete_outline : Icons.remove,
-                  color: cantidad == 1
-                      ? AppColors.terracota
-                      : AppColors.cafeMedio,
+                  color: cantidad == 1 ? AppColors.terracota : AppColors.cafeMedio,
                   onTap: onDecrementar,
                 ),
                 SizedBox(
@@ -956,10 +812,7 @@ class _TarjetaProductoSeleccionable extends StatelessWidget {
                               fontWeight: FontWeight.w700,
                               color: AppColors.cafeOscuro))),
                 ),
-                _BtnCantidad(
-                    icono: Icons.add,
-                    color: AppColors.oliva,
-                    onTap: onIncrementar),
+                _BtnCantidad(icono: Icons.add, color: AppColors.oliva, onTap: onIncrementar),
               ],
             )
           else
@@ -981,6 +834,7 @@ class _TarjetaProductoSeleccionable extends StatelessWidget {
   }
 }
 
+// ── Item borrador
 class _ItemBorradorWidget extends StatelessWidget {
   final _ItemBorrador item;
   final VoidCallback onIncrementar;
@@ -1046,12 +900,8 @@ class _ItemBorradorWidget extends StatelessWidget {
                 Row(
                   children: [
                     _BtnCantidad(
-                      icono: item.cantidad == 1
-                          ? Icons.delete_outline
-                          : Icons.remove,
-                      color: item.cantidad == 1
-                          ? AppColors.terracota
-                          : AppColors.cafeMedio,
+                      icono: item.cantidad == 1 ? Icons.delete_outline : Icons.remove,
+                      color: item.cantidad == 1 ? AppColors.terracota : AppColors.cafeMedio,
                       onTap: onDecrementar,
                     ),
                     SizedBox(
@@ -1063,10 +913,7 @@ class _ItemBorradorWidget extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.cafeOscuro))),
                     ),
-                    _BtnCantidad(
-                        icono: Icons.add,
-                        color: AppColors.oliva,
-                        onTap: onIncrementar),
+                    _BtnCantidad(icono: Icons.add, color: AppColors.oliva, onTap: onIncrementar),
                   ],
                 ),
               ],
@@ -1080,12 +927,9 @@ class _ItemBorradorWidget extends StatelessWidget {
                   child: GestureDetector(
                     onTap: onEditarNotas,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 7),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                       decoration: BoxDecoration(
-                        color: item.notas != null
-                            ? AppColors.alertaFondo
-                            : AppColors.cremaOscura,
+                        color: item.notas != null ? AppColors.alertaFondo : AppColors.cremaOscura,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -1095,9 +939,7 @@ class _ItemBorradorWidget extends StatelessWidget {
                                 ? Icons.sticky_note_2_outlined
                                 : Icons.add_comment_outlined,
                             size: 14,
-                            color: item.notas != null
-                                ? AppColors.alertaTexto
-                                : AppColors.cafeMedio,
+                            color: item.notas != null ? AppColors.alertaTexto : AppColors.cafeMedio,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -1125,14 +967,12 @@ class _ItemBorradorWidget extends StatelessWidget {
                 GestureDetector(
                   onTap: onEliminar,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 7),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                     decoration: BoxDecoration(
                       color: AppColors.terracota.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.delete_outline,
-                        size: 16, color: AppColors.terracota),
+                    child: const Icon(Icons.delete_outline, size: 16, color: AppColors.terracota),
                   ),
                 ),
               ],
@@ -1144,6 +984,7 @@ class _ItemBorradorWidget extends StatelessWidget {
   }
 }
 
+// ── Botón tipo entrega
 class _BotonTipoEntrega extends StatelessWidget {
   final IconData icono;
   final String titulo;
@@ -1169,9 +1010,7 @@ class _BotonTipoEntrega extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: seleccionado
-              ? color.withValues(alpha: 0.08)
-              : AppColors.superficie,
+          color: seleccionado ? color.withValues(alpha: 0.08) : AppColors.superficie,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
               color: seleccionado ? color : AppColors.borde,
@@ -1197,8 +1036,7 @@ class _BotonTipoEntrega extends StatelessWidget {
                     color: seleccionado ? color : AppColors.cafeOscuro)),
             const SizedBox(height: 2),
             Text(subtitulo,
-                style: GoogleFonts.inter(
-                    fontSize: 10.5, color: AppColors.cafeMedio)),
+                style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.cafeMedio)),
             if (seleccionado) ...[
               const SizedBox(height: 6),
               Icon(Icons.check_circle_rounded, color: color, size: 16),
@@ -1210,13 +1048,13 @@ class _BotonTipoEntrega extends StatelessWidget {
   }
 }
 
+// ── Fila total
 class _FilaTotal extends StatelessWidget {
   final String label;
   final String valor;
   final bool esNegrita;
 
-  const _FilaTotal(
-      {required this.label, required this.valor, required this.esNegrita});
+  const _FilaTotal({required this.label, required this.valor, required this.esNegrita});
 
   @override
   Widget build(BuildContext context) {
@@ -1226,30 +1064,25 @@ class _FilaTotal extends StatelessWidget {
         Text(label,
             style: esNegrita
                 ? AppTheme.etiqueta(size: 12)
-                : GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.cafeMedio)),
+                : GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio)),
         Text(valor,
             style: esNegrita
                 ? GoogleFonts.playfairDisplay(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.terracota)
+                    fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.terracota)
                 : GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.cafeOscuro)),
+                    fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.cafeOscuro)),
       ],
     );
   }
 }
 
+// ── Botón cantidad
 class _BtnCantidad extends StatelessWidget {
   final IconData icono;
   final Color color;
   final VoidCallback onTap;
 
-  const _BtnCantidad(
-      {required this.icono, required this.color, required this.onTap});
+  const _BtnCantidad({required this.icono, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
