@@ -306,21 +306,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── NUEVO: abre Ver Menú completo ──
-  void _abrirVerMenu() {
-    VerMenuSheet.mostrar(context, _productos, _cargandoMenu);
-  }
-
-  // ── NUEVO: navega a Crear Pedido ──
-  void _abrirCrearPedido() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => const CrearPedidoScreen(),
-    ),
-  );
-}
-
   void _abrirMenuCompleto() {
     _abrirHoja(
       titulo: 'Menú completo',
@@ -603,33 +588,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // ════════════════════════════════════════════════
-              //  NUEVAS TARJETAS GRANDES: Ver Menú + Crea Pedido
-              // ════════════════════════════════════════════════
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  children: [
-                    TarjetaAccionGrande(
-                      emoji: '🍽️',
-                      titulo: 'Ver Menú',
-                      subtitulo: 'Explora todos nuestros platos',
-                      color: AppColors.terracota,
-                      onTap: _abrirVerMenu,
-                    ),
-                    const SizedBox(height: 10),
-                    TarjetaAccionGrande(
-                      emoji: '📝',
-                      titulo: 'Crea tu Pedido',
-                      subtitulo: 'Arma tu pedido y elige cómo recibirlo',
-                      color: AppColors.oliva,
-                      onTap: _abrirCrearPedido,
-                    ),
-                  ],
                 ),
               ),
               const SizedBox(height: 24),
