@@ -6,6 +6,8 @@ import '../services/pedido_service.dart';
 import '../utils/app_strings.dart';
 import '../services/menu_service.dart';
 import 'reservas_screen.dart';
+import 'ver_menu_card.dart';
+import 'crea_pedido_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -181,7 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ CAMBIO: navega a ReservasScreen en vez de abrir bottom sheet local
   void _abrirReservarMesa() {
     Navigator.push(
       context,
@@ -307,6 +308,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── NUEVO: abre Ver Menú completo ──
+  void _abrirVerMenu() {
+    VerMenuSheet.mostrar(context, _productos, _cargandoMenu);
+  }
+
+  // ── NUEVO: navega a Crear Pedido ──
+  void _abrirCrearPedido() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => const CrearPedidoScreen(),
+    ),
+  );
+}
+
   void _abrirMenuCompleto() {
     _abrirHoja(
       titulo: 'Menú completo',
@@ -424,6 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Header saludo ──
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Row(
@@ -478,6 +495,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // ── Buscador ──
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: InkWell(
@@ -521,6 +540,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              // ── Banner de promo ──
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: InkWell(
@@ -587,6 +608,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+
+              // ════════════════════════════════════════════════
+              //  NUEVAS TARJETAS GRANDES: Ver Menú + Crea Pedido
+              // ════════════════════════════════════════════════
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    TarjetaAccionGrande(
+                      emoji: '🍽️',
+                      titulo: 'Ver Menú',
+                      subtitulo: 'Explora todos nuestros platos',
+                      color: AppColors.terracota,
+                      onTap: _abrirVerMenu,
+                    ),
+                    const SizedBox(height: 10),
+                    TarjetaAccionGrande(
+                      emoji: '📝',
+                      titulo: 'Crea tu Pedido',
+                      subtitulo: 'Arma tu pedido y elige cómo recibirlo',
+                      color: AppColors.oliva,
+                      onTap: _abrirCrearPedido,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Acciones rápidas (reserva, domicilio, promos) ──
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -621,6 +671,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 28),
+
+              // ── Categorías ──
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
@@ -686,6 +738,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 28),
+
+              // ── Destacados ──
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -743,6 +797,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
               ),
+
+              // ── Recomendados (solo si hay datos del usuario) ──
               if (conDatos) ...[
                 const SizedBox(height: 28),
                 Padding(
@@ -790,7 +846,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  WIDGETS PRIVADOS
+//  WIDGETS PRIVADOS (idénticos al original)
 // ─────────────────────────────────────────────────────────────
 
 class _AccionRapida extends StatelessWidget {

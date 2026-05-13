@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/pedido_service.dart';
-import '../services/menu_service.dart'; // MesaService
+import '../services/menu_service.dart';
 import '../theme/app_theme.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -9,7 +9,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_config.dart';
 
 class CarritoScreen extends StatefulWidget {
-  const CarritoScreen({super.key});
+  // Tipo de entrega y dirección vienen desde CrearPedidoScreen
+  final TipoEntregaApi tipoEntrega;
+  final String? direccionDomicilio;
+
+  const CarritoScreen({
+    super.key,
+    this.tipoEntrega = TipoEntregaApi.restaurante,
+    this.direccionDomicilio,
+  });
 
   @override
   State<CarritoScreen> createState() => _CarritoScreenState();
@@ -18,6 +26,10 @@ class CarritoScreen extends StatefulWidget {
 class _CarritoScreenState extends State<CarritoScreen> {
   final Carrito _carrito = Carrito();
   final _notasCtrl = TextEditingController();
+  final _direccionCtrl = TextEditingController();
+
+  // Tipo de entrega (editable en esta pantalla si el usuario quiere cambiar)
+  late TipoEntregaApi _tipoEntrega;
 
   // Mesas disponibles cargadas del backend
   List<_MesaOpc> _mesas = [];
@@ -28,12 +40,15 @@ class _CarritoScreenState extends State<CarritoScreen> {
   @override
   void initState() {
     super.initState();
+    _tipoEntrega = widget.tipoEntrega;
+    _direccionCtrl.text = widget.direccionDomicilio ?? '';
     _cargarMesas();
   }
 
   @override
   void dispose() {
     _notasCtrl.dispose();
+    _direccionCtrl.dispose();
     super.dispose();
   }
 
@@ -56,6 +71,11 @@ class _CarritoScreenState extends State<CarritoScreen> {
       _snack('Selecciona una mesa', esError: true);
       return;
     }
+    if (_tipoEntrega == TipoEntregaApi.domicilio &&
+        _direccionCtrl.text.trim().isEmpty) {
+      _snack('Ingresa la dirección de domicilio', esError: true);
+      return;
+    }
 
     setState(() => _enviando = true);
 
@@ -63,6 +83,10 @@ class _CarritoScreenState extends State<CarritoScreen> {
       mesaId: _mesaSeleccionada!.id,
       items: _carrito.items.toList(),
       notas: _notasCtrl.text.trim(),
+      tipoEntrega: _tipoEntrega,
+      direccionDomicilio: _tipoEntrega == TipoEntregaApi.domicilio
+          ? _direccionCtrl.text.trim()
+          : null,
     );
 
     setState(() => _enviando = false);
@@ -71,7 +95,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
 
     if (resultado is PedidoExito<PedidoApi>) {
       _carrito.limpiar();
-      Navigator.pop(context); // Cierra el carrito
+      Navigator.pop(context);
       _snack('¡Pedido #${resultado.datos.id} enviado a cocina! 🍽️');
     } else if (resultado is PedidoError<PedidoApi>) {
       _snack(resultado.mensaje, esError: true);
@@ -111,9 +135,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
             actions: [
               if (!_carrito.estaVacio)
                 TextButton(
-                  onPressed: () {
-                    _carrito.limpiar();
-                  },
+                  onPressed: () => _carrito.limpiar(),
                   child: Text('Limpiar',
                       style: GoogleFonts.inter(
                           fontSize: 13, color: AppColors.terracota)),
@@ -143,6 +165,82 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                   onEliminar: () =>
                                       _carrito.quitar(item.producto.id),
                                 )),
+
+                            const SizedBox(height: 24),
+
+                            // ── Tipo de entrega ──
+                            Text('TIPO DE ENTREGA', style: AppTheme.etiqueta()),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _ChipEntrega(
+                                    icono: Icons.restaurant,
+                                    etiqueta: 'Restaurante',
+                                    seleccionado: _tipoEntrega ==
+                                        TipoEntregaApi.restaurante,
+                                    onTap: () => setState(() =>
+                                        _tipoEntrega =
+                                            TipoEntregaApi.restaurante),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _ChipEntrega(
+                                    icono: Icons.delivery_dining,
+                                    etiqueta: 'Domicilio',
+                                    seleccionado: _tipoEntrega ==
+                                        TipoEntregaApi.domicilio,
+                                    onTap: () => setState(() =>
+                                        _tipoEntrega =
+                                            TipoEntregaApi.domicilio),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            // ── Dirección (solo si domicilio) ──
+                            if (_tipoEntrega == TipoEntregaApi.domicilio) ...[
+                              const SizedBox(height: 16),
+                              Text('DIRECCIÓN DE ENTREGA',
+                                  style: AppTheme.etiqueta()),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _direccionCtrl,
+                                style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppColors.cafeOscuro),
+                                decoration: InputDecoration(
+                                  hintText: 'Calle, barrio, ciudad...',
+                                  hintStyle: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      color: AppColors.cafeMedio),
+                                  prefixIcon: const Icon(
+                                      Icons.location_on_outlined,
+                                      color: AppColors.terracota,
+                                      size: 18),
+                                  filled: true,
+                                  fillColor: AppColors.superficie,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.borde),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.borde),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.terracota),
+                                  ),
+                                  contentPadding:
+                                      const EdgeInsets.all(14),
+                                ),
+                              ),
+                            ],
 
                             const SizedBox(height: 24),
 
@@ -177,8 +275,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                                 'No hay mesas disponibles ahora. Intenta más tarde.',
                                                 style: GoogleFonts.inter(
                                                     fontSize: 13,
-                                                    color:
-                                                        AppColors.alertaTexto),
+                                                    color: AppColors
+                                                        .alertaTexto),
                                               ),
                                             ),
                                             TextButton(
@@ -203,10 +301,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                                       _mesaSeleccionada
                                                               ?.id ==
                                                           m.id,
-                                                  onTap: () => setState(
-                                                      () =>
-                                                          _mesaSeleccionada =
-                                                              m),
+                                                  onTap: () => setState(() =>
+                                                      _mesaSeleccionada = m),
                                                 ))
                                             .toList(),
                                       ),
@@ -233,13 +329,13 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                 fillColor: AppColors.superficie,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(
-                                      color: AppColors.borde),
+                                  borderSide:
+                                      const BorderSide(color: AppColors.borde),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(
-                                      color: AppColors.borde),
+                                  borderSide:
+                                      const BorderSide(color: AppColors.borde),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -250,7 +346,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
                               ),
                             ),
 
-                            const SizedBox(height: 100), // espacio para botón
+                            const SizedBox(height: 100),
                           ],
                         ),
                       ),
@@ -263,8 +359,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
                         color: AppColors.superficie,
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                AppColors.cafeOscuro.withValues(alpha: 0.08),
+                            color: AppColors.cafeOscuro.withValues(alpha: 0.08),
                             blurRadius: 12,
                             offset: const Offset(0, -4),
                           ),
@@ -272,6 +367,26 @@ class _CarritoScreenState extends State<CarritoScreen> {
                       ),
                       child: Column(
                         children: [
+                          // Badge tipo de entrega
+                          Row(
+                            children: [
+                              Icon(
+                                _tipoEntrega == TipoEntregaApi.restaurante
+                                    ? Icons.restaurant
+                                    : Icons.delivery_dining,
+                                size: 14,
+                                color: AppColors.cafeMedio,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _tipoEntrega.etiqueta,
+                                style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: AppColors.cafeMedio),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -339,6 +454,56 @@ class _CarritoScreenState extends State<CarritoScreen> {
 //  WIDGETS PRIVADOS
 // ─────────────────────────────────────────────────────────────
 
+class _ChipEntrega extends StatelessWidget {
+  final IconData icono;
+  final String etiqueta;
+  final bool seleccionado;
+  final VoidCallback onTap;
+
+  const _ChipEntrega({
+    required this.icono,
+    required this.etiqueta,
+    required this.seleccionado,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: seleccionado ? AppColors.terracota : AppColors.superficie,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: seleccionado ? AppColors.terracota : AppColors.borde),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icono,
+                size: 18,
+                color:
+                    seleccionado ? AppColors.crema : AppColors.cafeMedio),
+            const SizedBox(width: 8),
+            Text(
+              etiqueta,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color:
+                    seleccionado ? AppColors.crema : AppColors.cafeOscuro,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ItemCarritoWidget extends StatelessWidget {
   final ItemCarrito item;
   final VoidCallback onIncrementar;
@@ -370,7 +535,6 @@ class _ItemCarritoWidget extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Emoji / imagen
           Container(
             width: 52,
             height: 52,
@@ -384,7 +548,6 @@ class _ItemCarritoWidget extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          // Nombre y precio
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,11 +570,11 @@ class _ItemCarritoWidget extends StatelessWidget {
               ],
             ),
           ),
-          // Controles cantidad
           Row(
             children: [
               _BotonCantidad(
-                icono: item.cantidad == 1 ? Icons.delete_outline : Icons.remove,
+                icono:
+                    item.cantidad == 1 ? Icons.delete_outline : Icons.remove,
                 color: item.cantidad == 1
                     ? AppColors.terracota
                     : AppColors.cafeMedio,
@@ -492,7 +655,8 @@ class _ChipMesa extends StatelessWidget {
           color: seleccionada ? AppColors.terracota : AppColors.superficie,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: seleccionada ? AppColors.terracota : AppColors.borde),
+              color:
+                  seleccionada ? AppColors.terracota : AppColors.borde),
         ),
         child: Column(
           children: [
@@ -501,7 +665,9 @@ class _ChipMesa extends StatelessWidget {
               style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: seleccionada ? AppColors.crema : AppColors.cafeOscuro),
+                  color: seleccionada
+                      ? AppColors.crema
+                      : AppColors.cafeOscuro),
             ),
             Text(
               '${mesa.capacidad} pers.',
@@ -541,16 +707,13 @@ class _CarritoVacio extends StatelessWidget {
                   color: AppColors.terracota, size: 38),
             ),
             const SizedBox(height: 20),
-            Text('Tu carrito está vacío',
-                style: AppTheme.titulo(size: 20)),
+            Text('Tu carrito está vacío', style: AppTheme.titulo(size: 20)),
             const SizedBox(height: 8),
             Text(
               'Explora el menú y agrega los platos que quieras pedir',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: AppColors.cafeMedio,
-                  height: 1.5),
+                  fontSize: 13, color: AppColors.cafeMedio, height: 1.5),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -566,7 +729,7 @@ class _CarritoVacio extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  MODELO LIGERO PARA MESAS (solo lo que necesita el carrito)
+//  MODELO LIGERO PARA MESAS
 // ─────────────────────────────────────────────────────────────
 
 class _MesaOpc {

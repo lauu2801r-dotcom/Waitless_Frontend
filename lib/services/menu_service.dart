@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
+import 'package:flutter/foundation.dart';
 
 class Producto {
   final int id;
@@ -29,7 +30,7 @@ class Producto {
         precio: (json['precio'] as num).toDouble(),
         categoria: json['categoria'] as String?,
         imagenUrl: json['imagen_url'] as String?,
-        disponible: json['disponible'] as bool,
+        disponible: json['disponible'] as bool? ?? true,
       );
 
   String get precioFormateado {
@@ -64,6 +65,8 @@ class MenuService {
   static Future<List<Producto>> obtenerMenu() async {
     try {
       final token = await _obtenerToken();
+      debugPrint('🍽️ Token: $token');
+
       final response = await http.get(
         Uri.parse('$_baseUrl/menu/'),
         headers: {
@@ -72,12 +75,30 @@ class MenuService {
         },
       );
 
+      debugPrint('🍽️ Status: ${response.statusCode}');
+      debugPrint('🍽️ Body: ${response.body}');
+
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((j) => Producto.fromJson(j)).toList();
+        debugPrint('🍽️ Total en JSON: ${data.length}');
+
+        final productos = <Producto>[];
+        for (final j in data) {
+          try {
+            final p = Producto.fromJson(j as Map<String, dynamic>);
+            productos.add(p);
+            debugPrint('✅ Parseado: ${p.nombre} disponible=${p.disponible}');
+          } catch (e) {
+            debugPrint('❌ Error parseando: $j → $e');
+          }
+        }
+
+        debugPrint('🍽️ Disponibles: ${productos.where((p) => p.disponible).length}');
+        return productos.where((p) => p.disponible).toList();
       }
       return [];
     } catch (e) {
+      debugPrint('🔴 MenuService ERROR: $e');
       return [];
     }
   }
@@ -95,10 +116,14 @@ class MenuService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((j) => Producto.fromJson(j)).toList();
+        return data
+            .map((j) => Producto.fromJson(j as Map<String, dynamic>))
+            .where((p) => p.disponible)
+            .toList();
       }
       return [];
     } catch (e) {
+      debugPrint('🔴 MenuService.obtenerPorCategoria ERROR: $e');
       return [];
     }
   }

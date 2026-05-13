@@ -6,6 +6,33 @@ import 'menu_service.dart';
 import 'api_config.dart';
 
 // ─────────────────────────────────────────────────────────────
+//  TIPO DE ENTREGA
+// ─────────────────────────────────────────────────────────────
+
+enum TipoEntregaApi { restaurante, domicilio }
+
+extension TipoEntregaApiX on TipoEntregaApi {
+  String get codigo {
+    switch (this) {
+      case TipoEntregaApi.restaurante: return 'restaurante';
+      case TipoEntregaApi.domicilio:   return 'domicilio';
+    }
+  }
+
+  String get etiqueta {
+    switch (this) {
+      case TipoEntregaApi.restaurante: return 'En restaurante';
+      case TipoEntregaApi.domicilio:   return 'A domicilio';
+    }
+  }
+
+  static TipoEntregaApi desdeCodigo(String? codigo) {
+    if (codigo == 'domicilio') return TipoEntregaApi.domicilio;
+    return TipoEntregaApi.restaurante;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 //  MODELOS DE DOMINIO
 // ─────────────────────────────────────────────────────────────
 
@@ -62,7 +89,7 @@ extension EstadoPedidoApiX on EstadoPedidoApi {
 class ItemPedidoApi {
   final int id;
   final int productoId;
-  final String? nombreProducto; // ← NUEVO
+  final String? nombreProducto;
   final int cantidad;
   final double precioUnitario;
   final double subtotal;
@@ -71,7 +98,7 @@ class ItemPedidoApi {
   const ItemPedidoApi({
     required this.id,
     required this.productoId,
-    this.nombreProducto, // ← NUEVO
+    this.nombreProducto,
     required this.cantidad,
     required this.precioUnitario,
     required this.subtotal,
@@ -81,7 +108,7 @@ class ItemPedidoApi {
   factory ItemPedidoApi.fromJson(Map<String, dynamic> json) => ItemPedidoApi(
         id: json['id'] as int,
         productoId: json['producto_id'] as int,
-        nombreProducto: json['nombre_producto'] as String?, // ← NUEVO
+        nombreProducto: json['nombre_producto'] as String?,
         cantidad: json['cantidad'] as int,
         precioUnitario: (json['precio_unitario'] as num).toDouble(),
         subtotal: (json['subtotal'] as num).toDouble(),
@@ -99,6 +126,9 @@ class PedidoApi {
   final double total;
   final List<ItemPedidoApi> items;
   final DateTime creadoEn;
+  // ── Nuevos campos de entrega ──
+  final TipoEntregaApi tipoEntrega;
+  final String? direccionDomicilio;
 
   const PedidoApi({
     required this.id,
@@ -110,6 +140,8 @@ class PedidoApi {
     required this.total,
     required this.items,
     required this.creadoEn,
+    this.tipoEntrega = TipoEntregaApi.restaurante,
+    this.direccionDomicilio,
   });
 
   factory PedidoApi.fromJson(Map<String, dynamic> json) => PedidoApi(
@@ -124,6 +156,9 @@ class PedidoApi {
             .map((i) => ItemPedidoApi.fromJson(i as Map<String, dynamic>))
             .toList(),
         creadoEn: DateTime.parse(json['creado_en'] as String),
+        tipoEntrega: TipoEntregaApiX.desdeCodigo(
+            json['tipo_entrega'] as String?),
+        direccionDomicilio: json['direccion_domicilio'] as String?,
       );
 
   String get totalFormateado {
@@ -249,6 +284,8 @@ class PedidoService {
     required int mesaId,
     required List<ItemCarrito> items,
     String? notas,
+    TipoEntregaApi tipoEntrega = TipoEntregaApi.restaurante,
+    String? direccionDomicilio,
   }) async {
     try {
       final headers = await _headers();
@@ -262,6 +299,11 @@ class PedidoService {
                 })
             .toList(),
         if (notas != null && notas.isNotEmpty) 'notas': notas,
+        'tipo_entrega': tipoEntrega.codigo,
+        if (tipoEntrega == TipoEntregaApi.domicilio &&
+            direccionDomicilio != null &&
+            direccionDomicilio.isNotEmpty)
+          'direccion_domicilio': direccionDomicilio,
       });
 
       debugPrint('📦 PedidoService.crearPedido → POST $_base/pedidos/');
