@@ -5,10 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'menu_service.dart';
 import 'api_config.dart';
 
-// ─────────────────────────────────────────────────────────────
-//  TIPO DE ENTREGA
-// ─────────────────────────────────────────────────────────────
-
 enum TipoEntregaApi { restaurante, domicilio }
 
 extension TipoEntregaApiX on TipoEntregaApi {
@@ -31,10 +27,6 @@ extension TipoEntregaApiX on TipoEntregaApi {
     return TipoEntregaApi.restaurante;
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-//  MODELOS DE DOMINIO
-// ─────────────────────────────────────────────────────────────
 
 enum EstadoPedidoApi {
   pendiente,
@@ -126,7 +118,6 @@ class PedidoApi {
   final double total;
   final List<ItemPedidoApi> items;
   final DateTime creadoEn;
-  // ── Nuevos campos de entrega ──
   final TipoEntregaApi tipoEntrega;
   final String? direccionDomicilio;
 
@@ -156,8 +147,7 @@ class PedidoApi {
             .map((i) => ItemPedidoApi.fromJson(i as Map<String, dynamic>))
             .toList(),
         creadoEn: DateTime.parse(json['creado_en'] as String),
-        tipoEntrega: TipoEntregaApiX.desdeCodigo(
-            json['tipo_entrega'] as String?),
+        tipoEntrega: TipoEntregaApiX.desdeCodigo(json['tipo_entrega'] as String?),
         direccionDomicilio: json['direccion_domicilio'] as String?,
       );
 
@@ -173,10 +163,6 @@ class PedidoApi {
     return '$hora:$min';
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-//  CARRITO
-// ─────────────────────────────────────────────────────────────
 
 class ItemCarrito {
   final Producto producto;
@@ -246,10 +232,6 @@ class Carrito extends ChangeNotifier {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  RESULTADO TIPADO
-// ─────────────────────────────────────────────────────────────
-
 sealed class PedidoResultado<T> {
   const PedidoResultado();
 }
@@ -263,10 +245,6 @@ class PedidoError<T> extends PedidoResultado<T> {
   final String mensaje;
   const PedidoError(this.mensaje);
 }
-
-// ─────────────────────────────────────────────────────────────
-//  SERVICIO DE PEDIDOS
-// ─────────────────────────────────────────────────────────────
 
 class PedidoService {
   static String get _base => ApiConfig.baseUrl;
@@ -414,6 +392,54 @@ class PedidoService {
       final error = jsonDecode(response.body);
       return PedidoError(error['detail'] ?? 'Error al cancelar');
     } catch (e) {
+      return PedidoError(_mensajeError(e));
+    }
+  }
+
+  static Future<PedidoResultado<PedidoApi>> editarItemsPedido({
+    required int pedidoId,
+    required int mesaId,
+    required List<ItemCarrito> items,
+    String? notas,
+    TipoEntregaApi tipoEntrega = TipoEntregaApi.restaurante,
+    String? direccionDomicilio,
+  }) async {
+    try {
+      final headers = await _headers();
+      final body = jsonEncode({
+        'items': items
+            .map((i) => {
+                  'producto_id': i.producto.id,
+                  'cantidad': i.cantidad,
+                  if (i.notas != null) 'notas': i.notas,
+                })
+            .toList(),
+        if (notas != null && notas.isNotEmpty) 'notas': notas,
+        'tipo_entrega': tipoEntrega.codigo,
+        if (tipoEntrega == TipoEntregaApi.domicilio &&
+            direccionDomicilio != null &&
+            direccionDomicilio.isNotEmpty)
+          'direccion_domicilio': direccionDomicilio,
+      });
+
+      debugPrint('✏️ editarItemsPedido → PUT $_base/pedidos/$pedidoId/items');
+      debugPrint('✏️ body: $body');
+
+      final response = await http
+          .put(Uri.parse('$_base/pedidos/$pedidoId/items'),
+              headers: headers, body: body)
+          .timeout(const Duration(seconds: 30));
+
+      debugPrint('✏️ ← status ${response.statusCode}: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return PedidoExito(PedidoApi.fromJson(data));
+      }
+      final error = jsonDecode(response.body);
+      return PedidoError(error['detail'] ?? 'Error al editar pedido');
+    } catch (e) {
+      debugPrint('✏️ editarItemsPedido ERROR: $e');
       return PedidoError(_mensajeError(e));
     }
   }

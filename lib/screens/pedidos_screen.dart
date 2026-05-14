@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/pedido_service.dart';
+import '../services/menu_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_strings.dart';
 import 'detalle_pedido_screen.dart';
@@ -29,9 +30,7 @@ class _PedidosScreenState extends State<PedidosScreen> {
       _cargando = true;
       _error = null;
     });
-
     final resultado = await PedidoService.misPedidos();
-
     if (!mounted) return;
     setState(() {
       _cargando = false;
@@ -56,31 +55,36 @@ class _PedidosScreenState extends State<PedidosScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('No',
-                style: GoogleFonts.inter(color: AppColors.cafeMedio)),
+            child: Text('No', style: GoogleFonts.inter(color: AppColors.cafeMedio)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text('Sí, cancelar',
                 style: GoogleFonts.inter(
-                    color: AppColors.terracota,
-                    fontWeight: FontWeight.w600)),
+                    color: AppColors.terracota, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
-
     if (confirmar != true) return;
-
     final resultado = await PedidoService.cancelarPedido(pedido.id);
     if (!mounted) return;
-
     if (resultado is PedidoExito<String>) {
       _snack('Pedido #${pedido.id} cancelado');
       _cargarPedidos();
     } else if (resultado is PedidoError<String>) {
       _snack(resultado.mensaje, esError: true);
     }
+  }
+
+  Future<void> _abrirModalPedido({PedidoApi? pedidoExistente}) async {
+    final resultado = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ModalPedido(pedidoExistente: pedidoExistente),
+    );
+    if (resultado == true) _cargarPedidos();
   }
 
   void _snack(String msg, {bool esError = false}) {
@@ -106,7 +110,6 @@ class _PedidosScreenState extends State<PedidosScreen> {
             p.estado == EstadoPedidoApi.entregado ||
             p.estado == EstadoPedidoApi.cancelado)
         .toList();
-
     final totalGastado = _pedidos
         .where((p) => p.estado == EstadoPedidoApi.entregado)
         .fold<double>(0, (s, p) => s + p.total);
@@ -137,17 +140,45 @@ class _PedidosScreenState extends State<PedidosScreen> {
                             style: AppTheme.etiqueta()),
                       ],
                     ),
-                    IconButton(
-                      onPressed: _cargarPedidos,
-                      icon: const Icon(Icons.refresh,
-                          color: AppColors.terracota),
+                    Row(
+                      children: [
+                        // ── Botón nuevo pedido ──
+                        GestureDetector(
+                          onTap: () => _abrirModalPedido(),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.terracota,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.add,
+                                    color: AppColors.crema, size: 16),
+                                const SizedBox(width: 4),
+                                Text('Nuevo',
+                                    style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.crema)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: _cargarPedidos,
+                          icon: const Icon(Icons.refresh,
+                              color: AppColors.terracota),
+                        ),
+                      ],
                     ),
                   ],
                 ),
 
                 const SizedBox(height: 20),
 
-                // ── Cargando ──
                 if (_cargando)
                   const Center(
                     child: Padding(
@@ -157,10 +188,9 @@ class _PedidosScreenState extends State<PedidosScreen> {
                     ),
                   )
                 else if (_error != null)
-                  _ErrorWidget(
-                      mensaje: _error!, onReintentar: _cargarPedidos)
+                  _ErrorWidget(mensaje: _error!, onReintentar: _cargarPedidos)
                 else ...[
-                  // ── Resumen rápido ──
+                  // ── Resumen ──
                   Row(
                     children: [
                       Expanded(
@@ -205,8 +235,7 @@ class _PedidosScreenState extends State<PedidosScreen> {
                         const Spacer(),
                         Text('${activos.length} pedidos',
                             style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: AppColors.cafeMedio)),
+                                fontSize: 11, color: AppColors.cafeMedio)),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -217,13 +246,17 @@ class _PedidosScreenState extends State<PedidosScreen> {
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    DetallePedidoScreen(pedido: p),
-                              ),
+                                  builder: (_) =>
+                                      DetallePedidoScreen(pedido: p)),
                             ).then((_) => _cargarPedidos()),
                             onCancelar:
                                 p.estado == EstadoPedidoApi.pendiente
                                     ? () => _cancelar(p)
+                                    : null,
+                            onEditar:
+                                p.estado == EstadoPedidoApi.pendiente
+                                    ? () => _abrirModalPedido(
+                                        pedidoExistente: p)
                                     : null,
                           ),
                         )),
@@ -251,22 +284,457 @@ class _PedidosScreenState extends State<PedidosScreen> {
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      DetallePedidoScreen(pedido: p),
-                                ),
+                                    builder: (_) =>
+                                        DetallePedidoScreen(pedido: p)),
                               ),
                             ),
                           ),
                         )),
                   ],
 
-                  // ── Estado vacío ──
                   if (_pedidos.isEmpty)
                     _EstadoVacio(onIrAInicio: widget.onIrAInicio),
                 ],
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MODAL CREAR / EDITAR PEDIDO
+// ─────────────────────────────────────────────────────────────
+
+class _ModalPedido extends StatefulWidget {
+  final PedidoApi? pedidoExistente;
+  const _ModalPedido({this.pedidoExistente});
+
+  @override
+  State<_ModalPedido> createState() => _ModalPedidoState();
+}
+
+class _ModalPedidoState extends State<_ModalPedido> {
+  final _notasCtrl = TextEditingController();
+  final _mesaCtrl = TextEditingController();
+
+  List<Producto> _menu = [];
+  final Map<int, int> _cantidades = {}; // productoId → cantidad
+  bool _cargandoMenu = true;
+  bool _guardando = false;
+  String? _errorGuardar;
+
+  bool get _esEdicion => widget.pedidoExistente != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_esEdicion) {
+      _mesaCtrl.text = widget.pedidoExistente!.mesaId.toString();
+      _notasCtrl.text = widget.pedidoExistente!.notas ?? '';
+      for (final item in widget.pedidoExistente!.items) {
+        _cantidades[item.productoId] = item.cantidad;
+      }
+    }
+    _cargarMenu();
+  }
+
+  @override
+  void dispose() {
+    _notasCtrl.dispose();
+    _mesaCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cargarMenu() async {
+    final productos = await MenuService.obtenerMenu();
+    if (!mounted) return;
+    setState(() {
+      _menu = productos;
+      _cargandoMenu = false;
+    });
+  }
+
+  List<ItemCarrito> get _itemsSeleccionados {
+    final lista = <ItemCarrito>[];
+    for (final p in _menu) {
+      final cant = _cantidades[p.id] ?? 0;
+      if (cant > 0) lista.add(ItemCarrito(producto: p, cantidad: cant));
+    }
+    return lista;
+  }
+
+  double get _total => _itemsSeleccionados.fold(0, (s, i) => s + i.subtotal);
+
+  String get _totalFormateado {
+    final t = _total.toInt();
+    return '\$${t.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
+  }
+
+  Future<void> _confirmar() async {
+    final mesaId = int.tryParse(_mesaCtrl.text.trim());
+    if (mesaId == null) {
+      setState(() => _errorGuardar = 'Ingresa un número de mesa válido');
+      return;
+    }
+    if (_itemsSeleccionados.isEmpty) {
+      setState(() => _errorGuardar = 'Agrega al menos un producto');
+      return;
+    }
+
+    setState(() {
+      _guardando = true;
+      _errorGuardar = null;
+    });
+
+    PedidoResultado<PedidoApi> resultado;
+
+    if (_esEdicion) {
+      resultado = await PedidoService.editarItemsPedido(
+        pedidoId: widget.pedidoExistente!.id,
+        mesaId: mesaId,
+        items: _itemsSeleccionados,
+        notas: _notasCtrl.text.trim().isEmpty ? null : _notasCtrl.text.trim(),
+      );
+    } else {
+      resultado = await PedidoService.crearPedido(
+        mesaId: mesaId,
+        items: _itemsSeleccionados,
+        notas: _notasCtrl.text.trim().isEmpty ? null : _notasCtrl.text.trim(),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() => _guardando = false);
+
+    if (resultado is PedidoExito<PedidoApi>) {
+      Navigator.pop(context, true);
+    } else if (resultado is PedidoError<PedidoApi>) {
+      setState(() => _errorGuardar = (resultado as PedidoError<PedidoApi>).mensaje);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 60),
+      decoration: const BoxDecoration(
+        color: AppColors.crema,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Column(
+        children: [
+          // ── Handle ──
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.borde,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Título ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Text(
+                  _esEdicion
+                      ? 'Editar pedido #${widget.pedidoExistente!.id}'
+                      : 'Nuevo pedido',
+                  style: AppTheme.titulo(size: 20),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: AppColors.cafeMedio),
+                ),
+              ],
+            ),
+          ),
+
+          const Divider(color: AppColors.borde),
+
+          Expanded(
+            child: _cargandoMenu
+                ? const Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.terracota))
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    children: [
+                      // ── Mesa ──
+                      Text('Mesa', style: AppTheme.etiqueta()),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _mesaCtrl,
+                        keyboardType: TextInputType.number,
+                        enabled: !_esEdicion,
+                        decoration: InputDecoration(
+                          hintText: 'Número de mesa',
+                          hintStyle: GoogleFonts.inter(
+                              fontSize: 13, color: AppColors.cafeMedio),
+                          filled: true,
+                          fillColor: AppColors.superficie,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.borde),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.borde),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // ── Productos ──
+                      Text('Productos', style: AppTheme.etiqueta()),
+                      const SizedBox(height: 10),
+
+                      ..._menu.map((p) => _FilaProducto(
+                            producto: p,
+                            cantidad: _cantidades[p.id] ?? 0,
+                            onIncrementar: () => setState(
+                                () => _cantidades[p.id] =
+                                    (_cantidades[p.id] ?? 0) + 1),
+                            onDecrementar: () => setState(() {
+                              final actual = _cantidades[p.id] ?? 0;
+                              if (actual <= 1) {
+                                _cantidades.remove(p.id);
+                              } else {
+                                _cantidades[p.id] = actual - 1;
+                              }
+                            }),
+                          )),
+
+                      const SizedBox(height: 20),
+
+                      // ── Notas ──
+                      Text('Notas (opcional)', style: AppTheme.etiqueta()),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _notasCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'Ej: sin cebolla, alergia al maní...',
+                          hintStyle: GoogleFonts.inter(
+                              fontSize: 13, color: AppColors.cafeMedio),
+                          filled: true,
+                          fillColor: AppColors.superficie,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.borde),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.borde),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+          ),
+
+          // ── Footer con total y botón ──
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            decoration: BoxDecoration(
+              color: AppColors.crema,
+              border: Border(top: BorderSide(color: AppColors.borde)),
+            ),
+            child: Column(
+              children: [
+                if (_errorGuardar != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.terracota.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _errorGuardar!,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.terracota),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Total',
+                            style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: AppColors.cafeMedio,
+                                fontWeight: FontWeight.w600)),
+                        Text(_totalFormateado,
+                            style: GoogleFonts.playfairDisplay(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.cafeOscuro)),
+                      ],
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: 160,
+                      child: ElevatedButton(
+                        onPressed: _guardando ? null : _confirmar,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.terracota,
+                          foregroundColor: AppColors.crema,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: _guardando
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    color: AppColors.crema,
+                                    strokeWidth: 2),
+                              )
+                            : Text(
+                                _esEdicion ? 'Guardar cambios' : 'Confirmar pedido',
+                                style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  FILA DE PRODUCTO EN EL MODAL
+// ─────────────────────────────────────────────────────────────
+
+class _FilaProducto extends StatelessWidget {
+  final Producto producto;
+  final int cantidad;
+  final VoidCallback onIncrementar;
+  final VoidCallback onDecrementar;
+
+  const _FilaProducto({
+    required this.producto,
+    required this.cantidad,
+    required this.onIncrementar,
+    required this.onDecrementar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.superficie,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: cantidad > 0 ? AppColors.terracota : AppColors.borde,
+            width: cantidad > 0 ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(producto.emoji, style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    producto.nombre,
+                    style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.cafeOscuro),
+                  ),
+                  Text(
+                    producto.precioFormateado,
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: AppColors.cafeMedio),
+                  ),
+                ],
+              ),
+            ),
+            // ── Contador ──
+            Row(
+              children: [
+                if (cantidad > 0) ...[
+                  GestureDetector(
+                    onTap: onDecrementar,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: AppColors.terracota.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.remove,
+                          size: 14, color: AppColors.terracota),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      '$cantidad',
+                      style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.cafeOscuro),
+                    ),
+                  ),
+                ],
+                GestureDetector(
+                  onTap: onIncrementar,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppColors.terracota,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.add,
+                        size: 14, color: AppColors.crema),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -281,11 +749,13 @@ class _TarjetaPedido extends StatelessWidget {
   final PedidoApi pedido;
   final VoidCallback? onTap;
   final VoidCallback? onCancelar;
+  final VoidCallback? onEditar;
 
   const _TarjetaPedido({
     required this.pedido,
     this.onTap,
     this.onCancelar,
+    this.onEditar,
   });
 
   Color get _colorEstado {
@@ -293,7 +763,7 @@ class _TarjetaPedido extends StatelessWidget {
     if (pedido.estado == EstadoPedidoApi.en_preparacion) return AppColors.oliva;
     if (pedido.estado == EstadoPedidoApi.listo) return AppColors.terracota;
     if (pedido.estado == EstadoPedidoApi.entregado) return AppColors.exitoTexto;
-    return AppColors.cafeMedio; // cancelado
+    return AppColors.cafeMedio;
   }
 
   @override
@@ -315,7 +785,6 @@ class _TarjetaPedido extends StatelessWidget {
           children: [
             Row(
               children: [
-                // Número de pedido
                 Container(
                   width: 44,
                   height: 44,
@@ -367,8 +836,7 @@ class _TarjetaPedido extends StatelessWidget {
                           Text(
                             '· ${pedido.horaFormateada}',
                             style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: AppColors.cafeMedio),
+                                fontSize: 11, color: AppColors.cafeMedio),
                           ),
                         ],
                       ),
@@ -385,17 +853,40 @@ class _TarjetaPedido extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                           color: AppColors.terracota),
                     ),
-                    if (onCancelar != null)
-                      GestureDetector(
-                        onTap: onCancelar,
-                        child: Text(
-                          'Cancelar',
-                          style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: AppColors.terracota,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ),
+                    const SizedBox(height: 4),
+                    // ── Botones Editar / Cancelar ──
+                    Row(
+                      children: [
+                        if (onEditar != null) ...[
+                          GestureDetector(
+                            onTap: onEditar,
+                            child: Text(
+                              'Editar',
+                              style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.oliva,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          if (onCancelar != null)
+                            Text(' · ',
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: AppColors.cafeMedio)),
+                        ],
+                        if (onCancelar != null)
+                          GestureDetector(
+                            onTap: onCancelar,
+                            child: Text(
+                              'Cancelar',
+                              style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.terracota,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -556,8 +1047,7 @@ class _ErrorWidget extends StatelessWidget {
             onPressed: onReintentar,
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('Reintentar'),
-            style:
-                TextButton.styleFrom(foregroundColor: AppColors.terracota),
+            style: TextButton.styleFrom(foregroundColor: AppColors.terracota),
           ),
         ],
       ),
