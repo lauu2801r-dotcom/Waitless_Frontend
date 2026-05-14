@@ -311,7 +311,7 @@ class PedidoService {
 
       final response = await http
           .post(Uri.parse('$_base/pedidos/'), headers: headers, body: body)
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 30));
 
       debugPrint('📦 ← status ${response.statusCode}: ${response.body}');
 
@@ -332,7 +332,7 @@ class PedidoService {
       final headers = await _headers();
       final response = await http
           .get(Uri.parse('$_base/pedidos/mis-pedidos'), headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -349,7 +349,7 @@ class PedidoService {
       final headers = await _headers();
       final response = await http
           .get(Uri.parse('$_base/pedidos/todos'), headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -366,7 +366,7 @@ class PedidoService {
       final headers = await _headers();
       final response = await http
           .get(Uri.parse('$_base/pedidos/activos'), headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -388,7 +388,7 @@ class PedidoService {
       final response = await http
           .patch(Uri.parse('$_base/pedidos/$pedidoId'),
               headers: headers, body: body)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -406,7 +406,7 @@ class PedidoService {
       final headers = await _headers();
       final response = await http
           .delete(Uri.parse('$_base/pedidos/$pedidoId'), headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return const PedidoExito('Pedido cancelado');
