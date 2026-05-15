@@ -437,9 +437,9 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
   Widget build(BuildContext context) {
     final auth = AuthScope.maybeOf(context);
     final usuario = auth?.usuario;
-    final restaurante = usuario?.nombreRestaurante ?? 'El Buen Sabor';
+    final restaurante = usuario?.nombreRestaurante ?? 'WaitLess';
     final nombreAdmin = usuario?.nombreCompleto ?? 'Administrador';
-    final correo = usuario?.correo ?? 'admin@elbuensabor.com';
+    final correo = usuario?.correo ?? 'admin@gmail.com';
 
     final labelMesas = _cargando ? '...' : '$_totalMesas';
     final labelPlatos = _cargando ? '...' : '$_totalPlatos platos';

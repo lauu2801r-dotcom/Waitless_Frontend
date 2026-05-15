@@ -1,6 +1,6 @@
 {
-    "name": "sabor_datos",
-    "short_name": "sabor_datos",
+    "name": "WaitLess",
+    "short_name": "WaitLess",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

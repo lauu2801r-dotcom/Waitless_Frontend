@@ -163,7 +163,7 @@ class _AdminShellState extends State<AdminShell> {
       case 3:
         return AppStrings.t(ctx, 'negocio');
       default:
-        return 'Sabor & Datos';
+        return 'Waitless';
     }
   }
 }

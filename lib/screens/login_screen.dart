@@ -209,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: Center(
                           child: Text(
-                            'S',
+                            'W',
                             style: GoogleFonts.playfairDisplay(
                               fontSize: 42,
                               fontStyle: FontStyle.italic,

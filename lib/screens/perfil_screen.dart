@@ -495,7 +495,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'En Sabor & Datos, tu información es tuya. Solo recopilamos lo necesario para mejorar tu experiencia gastronómica.',
+            'En WaitLess, tu información es tuya. Solo recopilamos lo necesario para mejorar tu experiencia gastronómica.',
             style: GoogleFonts.inter(
               fontSize: 13,
               color: AppColors.cafeOscuro,
@@ -523,7 +523,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   void _mostrarAcercaDe() {
     showAboutDialog(
       context: context,
-      applicationName: 'Sabor & Datos',
+      applicationName: 'WaitLess',
       applicationVersion: '1.0.0',
       applicationIcon: Container(
         width: 56,
@@ -534,7 +534,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
         ),
         child: Center(
           child: Text(
-            'S',
+            'W',
             style: GoogleFonts.playfairDisplay(
               fontSize: 28,
               fontStyle: FontStyle.italic,
@@ -545,7 +545,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
         ),
       ),
       applicationLegalese:
-          '© 2026 Sabor & Datos\nReserva tu mesa, conoce el momento ideal y vive la mejor experiencia gastronómica.',
+          '© 2026 WaitLess\nReserva tu mesa, conoce el momento ideal y vive la mejor experiencia gastronómica.',
     );
   }
 

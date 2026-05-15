@@ -6,18 +6,18 @@
     "configurations": [
         
         {
-            "name": "sabor_datos 2 backup",
+            "name": "WaitLess 2 backup",
             "request": "launch",
             "type": "dart"
         },
         {
-            "name": "sabor_datos 2 backup (profile mode)",
+            "name": "WaitLess 2 backup (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile"
         },
         {
-            "name": "sabor_datos 2 backup (release mode)",
+            "name": "WaitLess 2 backup (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"

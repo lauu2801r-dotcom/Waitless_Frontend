@@ -5,9 +5,9 @@ import '../models/usuario.dart';
 import 'auth_repository.dart';
 
 class LocalAuthRepository implements AuthRepository {
-  static const _kClaveUsuarios = 'sabor_datos.usuarios';
-  static const _kClaveSesion = 'sabor_datos.sesion_actual';
-  static const _kClaveCodigosPendientes = 'sabor_datos.codigos_verificacion';
+  static const _kClaveUsuarios = 'WaitLess.usuarios';
+  static const _kClaveSesion = 'WaitLess.sesion_actual';
+  static const _kClaveCodigosPendientes = 'WaitLess.codigos_verificacion';
 
   /// Código fijo de validación de negocio para crear cuentas administrador
   /// en este demo. En producción, lo emitiría el backend.
@@ -39,7 +39,7 @@ class LocalAuthRepository implements AuthRepository {
   }
 
   String _hashPassword(String password) {
-    final bytes = utf8.encode('sabor_datos_salt::$password');
+    final bytes = utf8.encode('WaitLess_salt::$password');
     var hash = 0;
     for (final b in bytes) {
       hash = ((hash << 5) - hash) + b;

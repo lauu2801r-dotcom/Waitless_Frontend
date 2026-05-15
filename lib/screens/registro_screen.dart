@@ -357,7 +357,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
                                             ),
                                           ),
                                           TextSpan(
-                                              text: ' de Sabor & Datos.'),
+                                              text: ' de WaitLess.'),
                                         ],
                                       ),
                                     ),

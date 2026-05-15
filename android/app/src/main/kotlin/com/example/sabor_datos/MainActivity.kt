@@ -1,4 +1,4 @@
-package com.example.sabor_datos
+package com.example.WaitLess
 
 import io.flutter.embedding.android.FlutterActivity
 

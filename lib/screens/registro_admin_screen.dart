@@ -187,7 +187,7 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
                       },
                       decoration: const InputDecoration(
                         labelText: 'NOMBRE DEL RESTAURANTE',
-                        hintText: 'El Buen Sabor',
+                        hintText: 'WaitLess',
                       ),
                     ),
                     const SizedBox(height: 16),

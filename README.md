@@ -1,4 +1,4 @@
-# Sabor & Datos
+# WaitLess
 
 App Flutter para gestión de restaurantes con dos roles: **cliente** (reservar mesa, hacer pedidos, ver predicciones de afluencia) y **administrador** (ver dashboard, gestionar pedidos, métricas del negocio).
 
@@ -25,12 +25,12 @@ flutter doctor
 
 ### 2. Descomprimir el proyecto
 
-Descomprime el zip en cualquier carpeta. Te quedará una carpeta llamada `sabor_datos 2 backup` (puedes renombrarla como quieras).
+Descomprime el zip en cualquier carpeta. Te quedará una carpeta llamada `WaitLess 2 backup` (puedes renombrarla como quieras).
 
 ### 3. Abrir la terminal en esa carpeta
 
 ```bash
-cd "ruta/donde/descomprimiste/sabor_datos 2 backup"
+cd "ruta/donde/descomprimiste/WaitLess 2 backup"
 ```
 
 ### 4. Instalar dependencias
