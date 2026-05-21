@@ -1,5 +1,3 @@
-package com.example.WaitLess
-
+package com.example.Waitless
 import io.flutter.embedding.android.FlutterActivity
-
 class MainActivity : FlutterActivity()
