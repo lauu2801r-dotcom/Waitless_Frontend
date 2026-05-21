@@ -5,6 +5,8 @@ import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_strings.dart';
 import 'login_screen.dart';
+import 'cliente_facturas_screen.dart';
+import 'pedidos_screen.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -799,7 +801,21 @@ class _PerfilScreenState extends State<PerfilScreen> {
               _GrupoOpciones(opciones: [
                 _OpcionMenu(Icons.receipt_long_outlined,
                     AppStrings.t(context, 'mis_pedidos'),
-                    onTap: () => _toast(AppStrings.t(context, 'mis_pedidos'))),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PedidosScreen(),
+                          ),
+                        )),
+                _OpcionMenu(Icons.description_outlined,
+                    AppStrings.t(context, 'mis_facturas'),
+                    valor: conDatos ? '5' : '0',
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ClienteFacturasScreen(),
+                          ),
+                        )),
                 _OpcionMenu(Icons.favorite_border,
                     AppStrings.t(context, 'favoritos'),
                     valor: conDatos ? '5' : '0',

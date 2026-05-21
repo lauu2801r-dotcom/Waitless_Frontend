@@ -6,6 +6,8 @@ import '../../services/mesa_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_strings.dart';
 import '../login_screen.dart';
+import 'admin_inventario_screen.dart';
+import 'admin_facturacion_screen.dart';
 
 class AdminPerfilScreen extends StatefulWidget {
   const AdminPerfilScreen({super.key});
@@ -509,7 +511,7 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(
+                        const Expanded(
                           child: _MetricaResumen(
                               valor: '4.8',
                               label: 'CALIF.',
@@ -658,17 +660,19 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
                             'Administra meseros, cocineros y cajeros. Asigna roles y permisos.',
                         icono: Icons.people_outline)),
                 _OpcionMenu(Icons.inventory_2_outlined, 'Inventario',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Inventario',
-                        descripcion:
-                            'Controla stock de ingredientes y bebidas. Recibe alertas de bajo inventario.',
-                        icono: Icons.inventory_2_outlined)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AdminInventarioScreen(),
+                          ),
+                        )),
                 _OpcionMenu(Icons.receipt_long_outlined, 'Facturación',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Facturación',
-                        descripcion:
-                            'Configura impuestos, propinas y método de facturación electrónica.',
-                        icono: Icons.receipt_long_outlined)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AdminFacturacionScreen(),
+                          ),
+                        )),
                 _OpcionMenu(Icons.local_offer_outlined, 'Promociones',
                     onTap: () => _abrirHoja(context,
                         titulo: 'Promociones',
