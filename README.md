@@ -140,3 +140,10 @@ lib/
 - **Compilación muy lenta la primera vez** → es normal. La segunda vez es mucho más rápido.
 - **"Could not find a set of Noto fonts"** → solo es un warning, ignóralo.
 - **Pantalla en blanco al cargar** → espera 5-10 segundos. Si sigue blanca, abre la consola del navegador (F12) para ver errores.
+
+
+## Proyecto académico
+
+Desarrollado como proyecto de grado — Ingeniería de Software  
+Universidad Manuela Beltrán · Bogotá, Colombia · 2026  
+Autora: Laura Valentina González Rojas y Valentina Blanco Alvis
