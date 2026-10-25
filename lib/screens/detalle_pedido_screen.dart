@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/pedido_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/pagar_pedido.dart';
 
 class DetallePedidoScreen extends StatelessWidget {
   final PedidoApi pedido;
@@ -280,6 +281,9 @@ class DetallePedidoScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 16),
+
+            // ── Pago ──
+            PagarPedido(pedido: pedido),
 
             // ── Llamar al mesero ──
             SizedBox(

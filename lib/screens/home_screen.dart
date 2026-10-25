@@ -6,6 +6,7 @@ import '../services/pedido_service.dart';
 import '../utils/app_strings.dart';
 import '../services/menu_service.dart';
 import 'reservas_screen.dart';
+import '../widgets/boton_favorito.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -343,7 +344,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text(producto.emoji,
                     style: const TextStyle(fontSize: 80))),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: BotonFavorito(productoId: producto.id),
+          ),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(

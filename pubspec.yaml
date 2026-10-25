@@ -23,6 +23,9 @@ dependencies:
   shared_preferences: ^2.3.2
   http: ^1.6.0
 
+  # Tiempo real (WebSocket)
+  web_socket_channel: ^3.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

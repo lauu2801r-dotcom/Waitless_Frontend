@@ -1,91 +1,132 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../../services/pagos_service.dart';
+import '../../services/inventario_service.dart' show InvExito, InvError;
+import '../../services/tiempo_real_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/formato.dart';
+
+IconData _iconoMetodo(String m) => switch (m) {
+      'tarjeta' => Icons.credit_card,
+      'billetera' => Icons.account_balance_wallet_outlined,
+      'transferencia' => Icons.account_balance,
+      _ => Icons.payments_outlined,
+    };
+
+Color _colorMetodo(String m) => switch (m) {
+      'tarjeta' => AppColors.terracota,
+      'billetera' => AppColors.cafeMedio,
+      'transferencia' => AppColors.cafeOscuro,
+      _ => AppColors.oliva,
+    };
 
 class AdminFacturacionScreen extends StatefulWidget {
   const AdminFacturacionScreen({super.key});
 
   @override
-  State<AdminFacturacionScreen> createState() =>
-      _AdminFacturacionScreenState();
+  State<AdminFacturacionScreen> createState() => _AdminFacturacionScreenState();
 }
 
 class _AdminFacturacionScreenState extends State<AdminFacturacionScreen> {
-  String _periodoActivo = 'Hoy';
-  final List<String> _periodos = const ['Hoy', 'Semana', 'Mes', 'Año'];
+  static const _periodos = {
+    'Hoy': 'hoy',
+    'Semana': 'semana',
+    'Mes': 'mes',
+    'Año': 'anio',
+  };
+  String _periodo = 'Hoy';
 
-  final List<_FacturaItem> _facturas = const [
-    _FacturaItem(
-      numero: 'F-001284',
-      mesa: 'Mesa 7',
-      total: 87500,
-      metodo: 'Tarjeta',
-      hora: '13:42',
-      estado: _EstadoFactura.pagada,
-    ),
-    _FacturaItem(
-      numero: 'F-001283',
-      mesa: 'Mesa 3',
-      total: 124000,
-      metodo: 'Efectivo',
-      hora: '13:18',
-      estado: _EstadoFactura.pagada,
-    ),
-    _FacturaItem(
-      numero: 'F-001282',
-      mesa: 'Mesa 12',
-      total: 56300,
-      metodo: 'Transferencia',
-      hora: '12:55',
-      estado: _EstadoFactura.pendiente,
-    ),
-    _FacturaItem(
-      numero: 'F-001281',
-      mesa: 'Mesa 5',
-      total: 198400,
-      metodo: 'Tarjeta',
-      hora: '12:40',
-      estado: _EstadoFactura.pagada,
-    ),
-    _FacturaItem(
-      numero: 'F-001280',
-      mesa: 'Domicilio',
-      total: 42700,
-      metodo: 'Efectivo',
-      hora: '12:12',
-      estado: _EstadoFactura.anulada,
-    ),
-    _FacturaItem(
-      numero: 'F-001279',
-      mesa: 'Mesa 9',
-      total: 78900,
-      metodo: 'Tarjeta',
-      hora: '11:48',
-      estado: _EstadoFactura.pagada,
-    ),
-  ];
+  ResumenApi? _resumen;
+  List<FacturaApi> _facturas = [];
+  List<PorCobrarApi> _porCobrar = [];
+  bool _cargando = true;
+  String? _error;
 
-  // ── Resúmenes ──
-  double get _totalDia => _facturas
-      .where((f) => f.estado == _EstadoFactura.pagada)
-      .fold<double>(0, (s, f) => s + f.total);
+  late final TiempoRealConexion _tiempoReal;
+  StreamSubscription<Map<String, dynamic>>? _suscripcion;
 
-  int get _totalFacturas =>
-      _facturas.where((f) => f.estado != _EstadoFactura.anulada).length;
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+    // Tiempo real: cuando alguien paga o se anula una factura, todo se actualiza.
+    _tiempoReal = TiempoRealConexion('dashboard')..conectar();
+    _suscripcion = _tiempoReal.eventos.listen((e) {
+      final tipo = e['tipo'] as String? ?? '';
+      if (tipo == 'pago_aprobado' ||
+          tipo == 'factura_anulada' ||
+          tipo == 'pedido_estado') {
+        _cargar(silencioso: true);
+      }
+    });
+  }
 
-  double get _ticketPromedio =>
-      _totalFacturas > 0 ? _totalDia / _totalFacturas : 0;
+  @override
+  void dispose() {
+    _suscripcion?.cancel();
+    _tiempoReal.cerrar();
+    super.dispose();
+  }
 
-  int get _pendientes =>
-      _facturas.where((f) => f.estado == _EstadoFactura.pendiente).length;
+  Future<void> _cargar({bool silencioso = false}) async {
+    if (!silencioso) {
+      setState(() {
+        _cargando = true;
+        _error = null;
+      });
+    }
+    final res = await Future.wait([
+      PagosService.resumen(_periodos[_periodo]!),
+      PagosService.facturas(),
+      PagosService.porCobrar(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _cargando = false;
+      final r = res[0], f = res[1], p = res[2];
+      if (r is InvExito<ResumenApi>) _resumen = r.datos;
+      if (f is InvExito<List<FacturaApi>>) _facturas = f.datos;
+      if (p is InvExito<List<PorCobrarApi>>) _porCobrar = p.datos;
+      if (!silencioso) {
+        if (r is InvError<ResumenApi>) {
+          _error = r.mensaje;
+        } else if (f is InvError<List<FacturaApi>>) {
+          _error = f.mensaje;
+        }
+      }
+    });
+  }
 
-  String _fmt(double n) => '\$${n.toStringAsFixed(0).replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-        (m) => '${m[1]}.',
-      )}';
+  void _snack(String msg, {bool error = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: error ? AppColors.terracotaOscuro : AppColors.oliva,
+    ));
+  }
+
+  Future<void> _abrirSheet(Widget Function(BuildContext) builder) async {
+    final r = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.crema,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: builder,
+    );
+    if (r != null && mounted) {
+      _snack(r);
+      _cargar(silencioso: true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final r = _resumen;
     return Scaffold(
       backgroundColor: AppColors.crema,
       appBar: AppBar(
@@ -95,706 +136,313 @@ class _AdminFacturacionScreenState extends State<AdminFacturacionScreen> {
           icon: const Icon(Icons.arrow_back, color: AppColors.cafeOscuro),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          'Facturación',
-          style: GoogleFonts.playfairDisplay(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-            color: AppColors.cafeOscuro,
-          ),
-        ),
+        title: Text('Facturación',
+            style: GoogleFonts.playfairDisplay(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: AppColors.cafeOscuro)),
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.file_download_outlined,
-              color: AppColors.terracota,
-            ),
-            tooltip: 'Exportar',
-            onPressed: () => _abrirExportar(context),
+            icon: const Icon(Icons.refresh, color: AppColors.terracota),
+            tooltip: 'Actualizar',
+            onPressed: () => _cargar(),
           ),
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Subtítulo ──
-              Text('INGRESOS Y FACTURAS', style: AppTheme.etiqueta()),
-              const SizedBox(height: 4),
-              Text(
-                'Control financiero del restaurante',
+        child: _cargando && r == null
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.terracota))
+            : _error != null && r == null
+                ? _Error(mensaje: _error!, onReintentar: _cargar)
+                : RefreshIndicator(
+                    color: AppColors.terracota,
+                    onRefresh: () => _cargar(silencioso: true),
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                      children: [
+                        Text('INGRESOS Y FACTURAS', style: AppTheme.etiqueta()),
+                        const SizedBox(height: 4),
+                        Text('Control financiero del restaurante',
+                            style: GoogleFonts.inter(
+                                fontSize: 13, color: AppColors.cafeMedio)),
+                        const SizedBox(height: 20),
+                        if (r != null) _tarjetaTotal(r),
+                        const SizedBox(height: 20),
+                        _selectorPeriodo(),
+                        const SizedBox(height: 22),
+                        _seccionPorCobrar(),
+                        if (r != null) _distribucion(r),
+                        _listaFacturas(),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Impuesto al consumo: 8 % · Los pagos se procesan con una pasarela simulada (no se guardan datos de tarjeta).',
+                          style: GoogleFonts.inter(
+                              fontSize: 11, color: AppColors.cafeMedio),
+                        ),
+                      ],
+                    ),
+                  ),
+      ),
+    );
+  }
+
+  // ── Tarjeta principal ──
+  Widget _tarjetaTotal(ResumenApi r) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.cafeOscuro, AppColors.terracotaOscuro],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: AppColors.cafeOscuro.withValues(alpha: 0.15),
+              blurRadius: 14,
+              offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('INGRESOS · ${_periodo.toUpperCase()}',
+              style: AppTheme.etiqueta(color: AppColors.cremaOscura)),
+          const SizedBox(height: 10),
+          Text(moneda(r.totalVentas),
+              style: GoogleFonts.playfairDisplay(
+                  fontSize: 38,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.crema,
+                  letterSpacing: -0.5)),
+          const SizedBox(height: 16),
+          Row(children: [
+            _mini('FACTURAS', '${r.totalFacturas}'),
+            _separador(),
+            _mini('TICKET PROM.', moneda(r.ticketPromedio)),
+            _separador(),
+            _mini('POR COBRAR', '${r.porCobrar}'),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _mini(String label, String valor) => Expanded(
+        child: Column(children: [
+          Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 9,
+                  letterSpacing: 1,
+                  color: AppColors.cremaOscura)),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(valor,
                 style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: AppColors.cafeMedio,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // ── Tarjeta total destacada ──
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.cafeOscuro,
-                      AppColors.terracotaOscuro,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.cafeOscuro.withValues(alpha: 0.15),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'INGRESOS · $_periodoActivo',
-                          style: AppTheme.etiqueta(
-                            color: AppColors.cremaOscura,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.oliva.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.trending_up,
-                                color: AppColors.olivaSuave,
-                                size: 12,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '+12.4%',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.olivaSuave,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _fmt(_totalDia),
-                      style: GoogleFonts.playfairDisplay(
-                        fontSize: 38,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.crema,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'vs. ayer · ${_fmt(_totalDia * 0.88)}',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppColors.cremaOscura,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _MiniMetricaOscura(
-                            label: 'FACTURAS',
-                            valor: '$_totalFacturas',
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 28,
-                          color: AppColors.cremaOscura.withValues(alpha: 0.3),
-                        ),
-                        Expanded(
-                          child: _MiniMetricaOscura(
-                            label: 'TICKET PROM.',
-                            valor: _fmt(_ticketPromedio),
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 28,
-                          color: AppColors.cremaOscura.withValues(alpha: 0.3),
-                        ),
-                        Expanded(
-                          child: _MiniMetricaOscura(
-                            label: 'PENDIENTES',
-                            valor: '$_pendientes',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // ── Selector de periodo ──
-              Row(
-                children: List.generate(_periodos.length, (i) {
-                  final p = _periodos[i];
-                  final activo = p == _periodoActivo;
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _periodoActivo = p),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: EdgeInsets.only(
-                          right: i < _periodos.length - 1 ? 8 : 0,
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: activo
-                              ? AppColors.terracota
-                              : AppColors.superficie,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: activo
-                                ? AppColors.terracota
-                                : AppColors.borde,
-                          ),
-                        ),
-                        child: Text(
-                          p,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: activo
-                                ? AppColors.crema
-                                : AppColors.cafeOscuro,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 22),
-
-              // ── Accesos rápidos ──
-              Text('ACCESOS RÁPIDOS', style: AppTheme.etiqueta()),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _AccesoRapido(
-                      icono: Icons.add_card,
-                      titulo: 'Nueva factura',
-                      color: AppColors.terracota,
-                      onTap: () => _abrirNuevaFactura(context),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _AccesoRapido(
-                      icono: Icons.receipt_outlined,
-                      titulo: 'Impuestos',
-                      color: AppColors.oliva,
-                      onTap: () => _abrirConfigImpuestos(context),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _AccesoRapido(
-                      icono: Icons.payments_outlined,
-                      titulo: 'Pagos',
-                      color: AppColors.cafeMedio,
-                      onTap: () => _abrirMetodosPago(context),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // ── Métodos de pago resumen ──
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.superficie,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.borde),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Distribución de pagos',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.cafeOscuro,
-                          ),
-                        ),
-                        Text(
-                          _periodoActivo,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.cafeMedio,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    _BarraPago(
-                      label: 'Tarjeta',
-                      icono: Icons.credit_card,
-                      porcentaje: 0.58,
-                      monto: _fmt(_totalDia * 0.58),
-                      color: AppColors.terracota,
-                    ),
-                    const SizedBox(height: 10),
-                    _BarraPago(
-                      label: 'Efectivo',
-                      icono: Icons.payments,
-                      porcentaje: 0.27,
-                      monto: _fmt(_totalDia * 0.27),
-                      color: AppColors.oliva,
-                    ),
-                    const SizedBox(height: 10),
-                    _BarraPago(
-                      label: 'Transferencia',
-                      icono: Icons.account_balance,
-                      porcentaje: 0.15,
-                      monto: _fmt(_totalDia * 0.15),
-                      color: AppColors.cafeMedio,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Lista facturas recientes ──
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Facturas recientes',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.cafeOscuro,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {},
-                    child: Text(
-                      'Ver todas',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: AppColors.terracota,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ..._facturas.map((f) => _TarjetaFactura(
-                    factura: f,
-                    onTap: () => _abrirDetalleFactura(context, f),
-                  )),
-
-              const SizedBox(height: 24),
-
-              // ── Configuración facturación ──
-              Text('CONFIGURACIÓN', style: AppTheme.etiqueta()),
-              const SizedBox(height: 12),
-              _GrupoConfig(items: [
-                _OpcionConfig(
-                  icono: Icons.bolt_outlined,
-                  titulo: 'Facturación electrónica',
-                  subtitulo: 'DIAN · Activa',
-                  estado: _EstadoConfig.activo,
-                  onTap: () => _abrirFacturaElectronica(context),
-                ),
-                _OpcionConfig(
-                  icono: Icons.percent,
-                  titulo: 'Impuestos',
-                  subtitulo: 'IVA 19% · INC 8%',
-                  estado: _EstadoConfig.activo,
-                  onTap: () => _abrirConfigImpuestos(context),
-                ),
-                _OpcionConfig(
-                  icono: Icons.savings_outlined,
-                  titulo: 'Propinas sugeridas',
-                  subtitulo: '8% · 10% · 12%',
-                  estado: _EstadoConfig.activo,
-                  onTap: () => _abrirConfigPropinas(context),
-                ),
-                _OpcionConfig(
-                  icono: Icons.credit_card,
-                  titulo: 'Métodos de pago',
-                  subtitulo: '3 activos',
-                  estado: _EstadoConfig.activo,
-                  onTap: () => _abrirMetodosPago(context),
-                ),
-                _OpcionConfig(
-                  icono: Icons.email_outlined,
-                  titulo: 'Envío automático',
-                  subtitulo: 'Por correo al cliente',
-                  estado: _EstadoConfig.inactivo,
-                  onTap: () {},
-                ),
-              ]),
-            ],
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.crema)),
           ),
-        ),
-      ),
-    );
-  }
+        ]),
+      );
 
-  // ── Sheets ───────────────────────────────────────────────
-  void _abrirDetalleFactura(BuildContext context, _FacturaItem f) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.crema,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => _DetalleFacturaSheet(factura: f),
-    );
-  }
+  Widget _separador() => Container(
+      width: 1,
+      height: 28,
+      color: AppColors.cremaOscura.withValues(alpha: 0.3));
 
-  void _abrirNuevaFactura(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.crema,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => const _NuevaFacturaSheet(),
-    );
-  }
-
-  void _abrirConfigImpuestos(BuildContext context) {
-    _abrirSheetSimple(
-      context,
-      titulo: 'Impuestos',
-      icono: Icons.percent,
-      descripcion:
-          'Define el IVA, INC y otros impuestos aplicados automáticamente a cada factura.',
-    );
-  }
-
-  void _abrirConfigPropinas(BuildContext context) {
-    _abrirSheetSimple(
-      context,
-      titulo: 'Propinas sugeridas',
-      icono: Icons.savings_outlined,
-      descripcion:
-          'Configura los porcentajes de propina que verán los clientes al pagar.',
-    );
-  }
-
-  void _abrirMetodosPago(BuildContext context) {
-    _abrirSheetSimple(
-      context,
-      titulo: 'Métodos de pago',
-      icono: Icons.credit_card,
-      descripcion:
-          'Habilita tarjeta, efectivo, transferencia y pasarelas digitales aceptadas.',
-    );
-  }
-
-  void _abrirFacturaElectronica(BuildContext context) {
-    _abrirSheetSimple(
-      context,
-      titulo: 'Facturación electrónica',
-      icono: Icons.bolt_outlined,
-      descripcion:
-          'Conecta con la DIAN para emitir facturas electrónicas válidas legalmente.',
-    );
-  }
-
-  void _abrirExportar(BuildContext context) {
-    _abrirSheetSimple(
-      context,
-      titulo: 'Exportar facturación',
-      icono: Icons.file_download_outlined,
-      descripcion:
-          'Descarga un reporte en PDF o Excel con todas las facturas del periodo seleccionado.',
-    );
-  }
-
-  void _abrirSheetSimple(
-    BuildContext context, {
-    required String titulo,
-    required IconData icono,
-    required String descripcion,
-  }) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.crema,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.cremaOscura,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Center(
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.terracota.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(icono, color: AppColors.terracota, size: 30),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              titulo,
-              textAlign: TextAlign.center,
-              style: AppTheme.titulo(size: 22),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              descripcion,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: AppColors.cafeMedio,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('ENTENDIDO'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// MODELOS INTERNOS
-// ─────────────────────────────────────────────────────────────
-enum _EstadoFactura { pagada, pendiente, anulada }
-
-extension on _EstadoFactura {
-  Color get color {
-    switch (this) {
-      case _EstadoFactura.pagada:
-        return AppColors.oliva;
-      case _EstadoFactura.pendiente:
-        return AppColors.terracotaOscuro;
-      case _EstadoFactura.anulada:
-        return AppColors.cafeMedio;
-    }
-  }
-
-  String get etiqueta {
-    switch (this) {
-      case _EstadoFactura.pagada:
-        return 'Pagada';
-      case _EstadoFactura.pendiente:
-        return 'Pendiente';
-      case _EstadoFactura.anulada:
-        return 'Anulada';
-    }
-  }
-}
-
-class _FacturaItem {
-  final String numero;
-  final String mesa;
-  final double total;
-  final String metodo;
-  final String hora;
-  final _EstadoFactura estado;
-
-  const _FacturaItem({
-    required this.numero,
-    required this.mesa,
-    required this.total,
-    required this.metodo,
-    required this.hora,
-    required this.estado,
-  });
-
-  IconData get iconoMetodo {
-    switch (metodo) {
-      case 'Tarjeta':
-        return Icons.credit_card;
-      case 'Efectivo':
-        return Icons.payments;
-      case 'Transferencia':
-        return Icons.account_balance;
-      default:
-        return Icons.attach_money;
-    }
-  }
-}
-
-enum _EstadoConfig { activo, inactivo }
-
-class _OpcionConfig {
-  final IconData icono;
-  final String titulo;
-  final String subtitulo;
-  final _EstadoConfig estado;
-  final VoidCallback onTap;
-
-  _OpcionConfig({
-    required this.icono,
-    required this.titulo,
-    required this.subtitulo,
-    required this.estado,
-    required this.onTap,
-  });
-}
-
-// ─────────────────────────────────────────────────────────────
-// MINI MÉTRICA OSCURA (sobre tarjeta cafe)
-// ─────────────────────────────────────────────────────────────
-class _MiniMetricaOscura extends StatelessWidget {
-  final String label;
-  final String valor;
-  const _MiniMetricaOscura({required this.label, required this.valor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          valor,
-          style: GoogleFonts.playfairDisplay(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.crema,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 9,
-            letterSpacing: 1,
-            color: AppColors.cremaOscura,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// ACCESO RÁPIDO
-// ─────────────────────────────────────────────────────────────
-class _AccesoRapido extends StatelessWidget {
-  final IconData icono;
-  final String titulo;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _AccesoRapido({
-    required this.icono,
-    required this.titulo,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        decoration: BoxDecoration(
-          color: AppColors.superficie,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.cafeOscuro.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
+  Widget _selectorPeriodo() {
+    final claves = _periodos.keys.toList();
+    return Row(
+      children: List.generate(claves.length, (i) {
+        final p = claves[i];
+        final activo = p == _periodo;
+        return Expanded(
+          child: GestureDetector(
+            onTap: () {
+              setState(() => _periodo = p);
+              _cargar(silencioso: true);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: EdgeInsets.only(right: i < claves.length - 1 ? 8 : 0),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
+                color: activo ? AppColors.terracota : AppColors.superficie,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: activo ? AppColors.terracota : AppColors.borde),
               ),
-              child: Icon(icono, color: color, size: 20),
+              child: Text(p,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: activo ? AppColors.crema : AppColors.cafeOscuro)),
             ),
-            const SizedBox(height: 8),
-            Text(
-              titulo,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.cafeOscuro,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      }),
     );
+  }
+
+  // ── Pedidos por cobrar ──
+  Widget _seccionPorCobrar() {
+    if (_porCobrar.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('POR COBRAR', style: AppTheme.etiqueta()),
+      const SizedBox(height: 12),
+      ..._porCobrar.map((p) => Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: AppColors.superficie,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.borde),
+            ),
+            child: ListTile(
+              onTap: () => _abrirSheet((_) => _CobrarSheet(pedido: p)),
+              leading: const CircleAvatar(
+                backgroundColor: AppColors.alertaFondo,
+                child: Icon(Icons.point_of_sale, color: AppColors.terracota),
+              ),
+              title: Text('${p.concepto} · Pedido #${p.pedidoId}',
+                  style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cafeOscuro)),
+              subtitle: Text('Total con impuesto ${moneda(p.totalEstimado)}',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.cafeMedio)),
+              trailing: Text('Cobrar',
+                  style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.terracota)),
+            ),
+          )),
+      const SizedBox(height: 14),
+    ]);
+  }
+
+  // ── Distribución por método ──
+  Widget _distribucion(ResumenApi r) {
+    final total = r.totalVentas;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.superficie,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borde),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Distribución de pagos · $_periodo',
+            style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.cafeOscuro)),
+        const SizedBox(height: 14),
+        if (total <= 0)
+          Text('Aún no hay pagos en este periodo.',
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: AppColors.cafeMedio))
+        else
+          ...metodosPago.map((m) {
+            final monto = r.totalPorMetodo[m] ?? 0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _BarraPago(
+                label: nombreMetodo(m),
+                icono: _iconoMetodo(m),
+                porcentaje: monto / total,
+                monto: moneda(monto),
+                color: _colorMetodo(m),
+              ),
+            );
+          }),
+      ]),
+    );
+  }
+
+  // ── Lista de facturas ──
+  Widget _listaFacturas() {
+    final desde = _desdePeriodo();
+    final lista = _facturas
+        .where((f) => f.pagadoEn == null || !f.pagadoEn!.isBefore(desde))
+        .toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Facturas · $_periodo',
+          style: GoogleFonts.playfairDisplay(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: AppColors.cafeOscuro)),
+      const SizedBox(height: 12),
+      if (lista.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Center(
+            child: Text('No hay facturas en este periodo.',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.cafeMedio)),
+          ),
+        ),
+      ...lista.map((f) => _TarjetaFactura(
+            factura: f,
+            onTap: () => _abrirSheet((_) => _DetalleFacturaSheet(id: f.id)),
+          )),
+    ]);
+  }
+
+  /// Inicio del periodo en hora local (la app y el servidor usan el mismo cálculo).
+  DateTime _desdePeriodo() {
+    final ahora = DateTime.now();
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    switch (_periodos[_periodo]) {
+      case 'semana':
+        return hoy.subtract(const Duration(days: 6));
+      case 'mes':
+        return DateTime(ahora.year, ahora.month, 1);
+      case 'anio':
+        return DateTime(ahora.year, 1, 1);
+      default:
+        return hoy;
+    }
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// BARRA DE PAGO
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────── Widgets pequeños ─────────────────────────
+class _Error extends StatelessWidget {
+  final String mensaje;
+  final VoidCallback onReintentar;
+  const _Error({required this.mensaje, required this.onReintentar});
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.cloud_off, size: 44, color: AppColors.cafeMedio),
+            const SizedBox(height: 12),
+            Text(mensaje,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(color: AppColors.cafeOscuro)),
+            const SizedBox(height: 12),
+            TextButton(onPressed: onReintentar, child: const Text('Reintentar')),
+          ]),
+        ),
+      );
+}
+
 class _BarraPago extends StatelessWidget {
   final String label;
   final IconData icono;
   final double porcentaje;
   final String monto;
   final Color color;
-
   const _BarraPago({
     required this.label,
     required this.icono,
@@ -805,91 +453,43 @@ class _BarraPago extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icono, color: color, size: 16),
-        ),
-        const SizedBox(width: 10),
+    return Column(children: [
+      Row(children: [
+        Icon(icono, size: 16, color: color),
+        const SizedBox(width: 8),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    label,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.cafeOscuro,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        monto,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.cafeOscuro,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${(porcentaje * 100).toStringAsFixed(0)}%',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: AppColors.cafeMedio,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: LinearProgressIndicator(
-                  value: porcentaje,
-                  minHeight: 5,
-                  backgroundColor: AppColors.bordeSuave,
-                  valueColor: AlwaysStoppedAnimation<Color>(color),
-                ),
-              ),
-            ],
-          ),
+          child: Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: AppColors.cafeOscuro)),
         ),
-      ],
-    );
+        Text('${(porcentaje * 100).round()}% · $monto',
+            style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.cafeOscuro)),
+      ]),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: LinearProgressIndicator(
+          value: porcentaje.clamp(0.0, 1.0),
+          minHeight: 6,
+          backgroundColor: AppColors.cremaOscura,
+          valueColor: AlwaysStoppedAnimation(color),
+        ),
+      ),
+    ]);
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// TARJETA FACTURA
-// ─────────────────────────────────────────────────────────────
 class _TarjetaFactura extends StatelessWidget {
-  final _FacturaItem factura;
+  final FacturaApi factura;
   final VoidCallback onTap;
-
   const _TarjetaFactura({required this.factura, required this.onTap});
-
-  String _fmt(double n) => '\$${n.toStringAsFixed(0).replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-        (m) => '${m[1]}.',
-      )}';
 
   @override
   Widget build(BuildContext context) {
-    final color = factura.estado.color;
-
+    final f = factura;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -898,482 +498,471 @@ class _TarjetaFactura extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.superficie,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.cafeOscuro.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          border: Border.all(color: AppColors.borde),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(factura.iconoMetodo, color: color, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        factura.numero,
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.cafeOscuro,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          factura.estado.etiqueta,
-                          style: GoogleFonts.inter(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: color,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${factura.mesa} · ${factura.metodo} · ${factura.hora}',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppColors.cafeMedio,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              _fmt(factura.total),
-              style: GoogleFonts.playfairDisplay(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: factura.estado == _EstadoFactura.anulada
-                    ? AppColors.cafeMedio
-                    : AppColors.terracota,
-                decoration: factura.estado == _EstadoFactura.anulada
-                    ? TextDecoration.lineThrough
-                    : null,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// GRUPO CONFIGURACIÓN
-// ─────────────────────────────────────────────────────────────
-class _GrupoConfig extends StatelessWidget {
-  final List<_OpcionConfig> items;
-  const _GrupoConfig({required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.superficie,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borde),
-      ),
-      child: Column(
-        children: List.generate(items.length, (i) {
-          final op = items[i];
-          final ultimo = i == items.length - 1;
-          final activo = op.estado == _EstadoConfig.activo;
-
-          return InkWell(
-            onTap: op.onTap,
-            borderRadius: i == 0
-                ? const BorderRadius.vertical(top: Radius.circular(14))
-                : ultimo
-                    ? const BorderRadius.vertical(bottom: Radius.circular(14))
-                    : BorderRadius.zero,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: ultimo
-                      ? BorderSide.none
-                      : const BorderSide(
-                          color: AppColors.bordeSuave, width: 1),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.cremaOscura,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      op.icono,
-                      color: AppColors.cafeOscuro,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          op.titulo,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.cafeOscuro,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          op.subtitulo,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.cafeMedio,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: activo
-                          ? AppColors.olivaFondo
-                          : AppColors.cremaOscura,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      activo ? 'ACTIVO' : 'INACTIVO',
-                      style: GoogleFonts.inter(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: activo ? AppColors.oliva : AppColors.cafeMedio,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.chevron_right,
-                    color: AppColors.cafeMedio,
-                    size: 18,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// SHEET DETALLE FACTURA
-// ─────────────────────────────────────────────────────────────
-class _DetalleFacturaSheet extends StatelessWidget {
-  final _FacturaItem factura;
-  const _DetalleFacturaSheet({required this.factura});
-
-  String _fmt(double n) => '\$${n.toStringAsFixed(0).replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-        (m) => '${m[1]}.',
-      )}';
-
-  @override
-  Widget build(BuildContext context) {
-    final subtotal = factura.total / 1.19;
-    final iva = factura.total - subtotal;
-    final color = factura.estado.color;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.cremaOscura,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                factura.estado.etiqueta.toUpperCase(),
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                  color: color,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            factura.numero,
-            textAlign: TextAlign.center,
-            style: AppTheme.titulo(size: 26),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${factura.mesa} · ${factura.hora}',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: AppColors.cafeMedio,
-            ),
-          ),
-          const SizedBox(height: 20),
+        child: Row(children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: AppColors.superficie,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.borde),
+              color: _colorMetodo(f.metodo).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Column(
-              children: [
-                _FilaTotal(label: 'Subtotal', valor: _fmt(subtotal)),
-                _FilaTotal(label: 'IVA 19%', valor: _fmt(iva)),
-                const Divider(color: AppColors.bordeSuave, height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'TOTAL',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1,
-                        color: AppColors.cafeOscuro,
-                      ),
+            child: Icon(_iconoMetodo(f.metodo),
+                size: 20, color: _colorMetodo(f.metodo)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${f.numero} · ${f.concepto}',
+                  style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cafeOscuro)),
+              const SizedBox(height: 2),
+              Text('${nombreMetodo(f.metodo)} · ${fechaHora(f.pagadoEn)}',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: AppColors.cafeMedio)),
+            ]),
+          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(moneda(f.total),
+                style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: f.anulada
+                        ? AppColors.cafeMedio
+                        : AppColors.cafeOscuro,
+                    decoration:
+                        f.anulada ? TextDecoration.lineThrough : null)),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: f.anulada ? AppColors.alertaFondo : AppColors.exitoFondo,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(f.anulada ? 'Anulada' : 'Pagada',
+                  style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: f.anulada
+                          ? AppColors.alertaTexto
+                          : AppColors.exitoTexto)),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+// ───────────────────────── Detalle + anular ─────────────────────────
+class _DetalleFacturaSheet extends StatefulWidget {
+  final int id;
+  const _DetalleFacturaSheet({required this.id});
+
+  @override
+  State<_DetalleFacturaSheet> createState() => _DetalleFacturaSheetState();
+}
+
+class _DetalleFacturaSheetState extends State<_DetalleFacturaSheet> {
+  FacturaApi? _f;
+  String? _error;
+  bool _anulando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    final r = await PagosService.factura(widget.id);
+    if (!mounted) return;
+    setState(() {
+      if (r is InvExito<FacturaApi>) _f = r.datos;
+      if (r is InvError<FacturaApi>) _error = r.mensaje;
+    });
+  }
+
+  Future<void> _anular() async {
+    final motivo = await showDialog<String>(
+      context: context,
+      builder: (_) => const _MotivoDialog(),
+    );
+    if (motivo == null || !mounted) return;
+    setState(() => _anulando = true);
+    final r = await PagosService.anular(widget.id, motivo);
+    if (!mounted) return;
+    if (r is InvExito<FacturaApi>) {
+      Navigator.pop(context, 'Factura ${r.datos.numero} anulada');
+    } else if (r is InvError<FacturaApi>) {
+      setState(() {
+        _anulando = false;
+        _error = r.mensaje;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = _f;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: SingleChildScrollView(
+        child: f == null
+            ? SizedBox(
+                height: 160,
+                child: Center(
+                  child: _error != null
+                      ? Text(_error!,
+                          style: GoogleFonts.inter(color: AppColors.cafeOscuro))
+                      : const CircularProgressIndicator(
+                          color: AppColors.terracota),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(children: [
+                    Expanded(
+                      child: Text(f.numero,
+                          style: GoogleFonts.playfairDisplay(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.cafeOscuro)),
                     ),
-                    Text(
-                      _fmt(factura.total),
-                      style: GoogleFonts.playfairDisplay(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.terracota,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: f.anulada
+                            ? AppColors.alertaFondo
+                            : AppColors.exitoFondo,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(f.anulada ? 'Anulada' : 'Pagada',
+                          style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: f.anulada
+                                  ? AppColors.alertaTexto
+                                  : AppColors.exitoTexto)),
+                    ),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text(
+                      '${f.concepto} · Pedido #${f.pedidoId} · ${fechaHora(f.pagadoEn)}',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.cafeMedio)),
+                  if (f.clienteEmail != null)
+                    Text(f.clienteEmail!,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.cafeMedio)),
+                  const SizedBox(height: 16),
+                  ...f.items.map((i) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(children: [
+                          Expanded(
+                            child: Text('${i.cantidad} × ${i.nombre}',
+                                style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppColors.cafeOscuro)),
+                          ),
+                          Text(moneda(i.subtotal),
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, color: AppColors.cafeOscuro)),
+                        ]),
+                      )),
+                  const Divider(height: 24),
+                  _fila('Subtotal', moneda(f.subtotal)),
+                  _fila('Impuesto (${fmtNum(f.impuestoPct)}%)',
+                      moneda(f.impuesto)),
+                  _fila('Propina', moneda(f.propina)),
+                  _fila('Método', nombreMetodo(f.metodo)),
+                  _fila('Total', moneda(f.total), fuerte: true),
+                  if (f.anulada) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.alertaFondo,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                          'Motivo: ${f.anuladaMotivo ?? '—'}\nPor: ${f.anuladaPorEmail ?? '—'}',
+                          style: GoogleFonts.inter(
+                              fontSize: 12, color: AppColors.alertaTexto)),
+                    ),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(_error!,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.terracotaOscuro)),
+                  ],
+                  if (!f.anulada) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _anulando ? null : _anular,
+                        icon: const Icon(Icons.block, size: 18),
+                        label: Text(_anulando ? 'Anulando…' : 'Anular factura'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.terracotaOscuro,
+                          side: const BorderSide(
+                              color: AppColors.terracotaOscuro),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
                       ),
                     ),
                   ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.cremaOscura,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(factura.iconoMetodo,
-                    color: AppColors.cafeOscuro, size: 18),
-                const SizedBox(width: 10),
-                Text(
-                  'Pagado con ',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppColors.cafeMedio,
-                  ),
-                ),
-                Text(
-                  factura.metodo,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.cafeOscuro,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.share_outlined, size: 18),
-                  label: const Text('Compartir'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.cafeOscuro,
-                    side: const BorderSide(color: AppColors.borde),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('Descargar'),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
-}
 
-class _FilaTotal extends StatelessWidget {
-  final String label;
-  final String valor;
-  const _FilaTotal({required this.label, required this.valor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: AppColors.cafeMedio,
-            ),
-          ),
-          Text(
-            valor,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.cafeOscuro,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// SHEET NUEVA FACTURA
-// ─────────────────────────────────────────────────────────────
-class _NuevaFacturaSheet extends StatelessWidget {
-  const _NuevaFacturaSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.cremaOscura,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text('Nueva factura', style: AppTheme.titulo(size: 22)),
-            const SizedBox(height: 4),
-            Text(
-              'Genera una factura manual para un pedido o consumo.',
+  Widget _fila(String a, String b, {bool fuerte = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(a,
               style: GoogleFonts.inter(
-                fontSize: 12,
-                color: AppColors.cafeMedio,
-              ),
+                  fontSize: fuerte ? 15 : 13,
+                  fontWeight: fuerte ? FontWeight.w700 : FontWeight.w400,
+                  color: AppColors.cafeOscuro)),
+          Text(b,
+              style: GoogleFonts.inter(
+                  fontSize: fuerte ? 15 : 13,
+                  fontWeight: fuerte ? FontWeight.w700 : FontWeight.w500,
+                  color: AppColors.cafeOscuro)),
+        ]),
+      );
+}
+
+class _MotivoDialog extends StatefulWidget {
+  const _MotivoDialog();
+
+  @override
+  State<_MotivoDialog> createState() => _MotivoDialogState();
+}
+
+class _MotivoDialogState extends State<_MotivoDialog> {
+  final _ctrl = TextEditingController();
+  String? _err;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.crema,
+      title: Text('Anular factura',
+          style: GoogleFonts.playfairDisplay(
+              fontWeight: FontWeight.w600, color: AppColors.cafeOscuro)),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        decoration: InputDecoration(
+            labelText: 'Motivo de la anulación', errorText: _err),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () {
+            final t = _ctrl.text.trim();
+            if (t.length < 3) {
+              setState(() => _err = 'Escribe el motivo');
+              return;
+            }
+            Navigator.pop(context, t);
+          },
+          child: const Text('Anular'),
+        ),
+      ],
+    );
+  }
+}
+
+// ───────────────────────── Cobrar un pedido ─────────────────────────
+class _CobrarSheet extends StatefulWidget {
+  final PorCobrarApi pedido;
+  const _CobrarSheet({required this.pedido});
+
+  @override
+  State<_CobrarSheet> createState() => _CobrarSheetState();
+}
+
+class _CobrarSheetState extends State<_CobrarSheet> {
+  final _propinaCtrl = TextEditingController();
+  String _metodo = 'efectivo';
+  bool _simularRechazo = false;
+  bool _procesando = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _propinaCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _propina => double.tryParse(_propinaCtrl.text.trim()) ?? 0;
+
+  Future<void> _cobrar() async {
+    setState(() {
+      _procesando = true;
+      _error = null;
+    });
+    final r = await PagosService.pagar(
+      pedidoId: widget.pedido.pedidoId,
+      metodo: _metodo,
+      propina: _propina,
+      simularRechazo: _simularRechazo,
+    );
+    if (!mounted) return;
+    if (r is InvExito<PagoApi>) {
+      if (r.datos.aprobado) {
+        Navigator.pop(context,
+            'Pago aprobado · ${r.datos.factura?.numero ?? ''}');
+        return;
+      }
+      setState(() {
+        _procesando = false;
+        _error = '${r.datos.motivoRechazo ?? 'Pago rechazado'}. Puedes reintentar.';
+      });
+    } else if (r is InvError<PagoApi>) {
+      setState(() {
+        _procesando = false;
+        _error = r.mensaje;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.pedido;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Cobrar ${p.concepto}',
+                style: GoogleFonts.playfairDisplay(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.cafeOscuro)),
+            Text('Pedido #${p.pedidoId}',
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: AppColors.cafeMedio)),
+            const SizedBox(height: 16),
+            _fila('Subtotal', moneda(p.subtotal)),
+            _fila('Impuesto (8%)', moneda(p.impuesto)),
+            _fila('Propina', moneda(_propina)),
+            _fila('Total a cobrar',
+                moneda(p.totalEstimado + _propina),
+                fuerte: true),
+            const SizedBox(height: 16),
+            Text('MÉTODO DE PAGO', style: AppTheme.etiqueta()),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: metodosPago.map((m) {
+                final activo = m == _metodo;
+                return ChoiceChip(
+                  selected: activo,
+                  onSelected: _procesando
+                      ? null
+                      : (_) => setState(() => _metodo = m),
+                  avatar: Icon(_iconoMetodo(m),
+                      size: 16,
+                      color: activo ? AppColors.crema : _colorMetodo(m)),
+                  label: Text(nombreMetodo(m)),
+                  selectedColor: AppColors.terracota,
+                  labelStyle: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: activo ? AppColors.crema : AppColors.cafeOscuro),
+                );
+              }).toList(),
             ),
-            const SizedBox(height: 20),
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'MESA O CLIENTE',
-                hintText: 'Mesa 7 / Domicilio',
-              ),
-            ),
-            const SizedBox(height: 12),
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'CONCEPTO',
-                hintText: 'Detalle del consumo',
-              ),
-            ),
-            const SizedBox(height: 12),
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'TOTAL (\$)',
-                hintText: '0',
-              ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _propinaCtrl,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                  labelText: 'Propina (opcional)', prefixText: '\$ '),
             ),
-            const SizedBox(height: 12),
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'MÉTODO DE PAGO',
-                hintText: 'Tarjeta / Efectivo / Transferencia',
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _simularRechazo,
+              onChanged:
+                  _procesando ? null : (v) => setState(() => _simularRechazo = v),
+              activeThumbColor: AppColors.terracota,
+              title: Text('Simular rechazo (solo pruebas)',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.cafeMedio)),
+            ),
+            if (_error != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.alertaFondo,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(_error!,
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.alertaTexto)),
               ),
-            ),
-            const SizedBox(height: 22),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('GENERAR FACTURA'),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _procesando ? null : _cobrar,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.terracota,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: Text(_procesando
+                    ? 'Procesando…'
+                    : (_error != null ? 'Reintentar pago' : 'Cobrar')),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+
+  Widget _fila(String a, String b, {bool fuerte = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(a,
+              style: GoogleFonts.inter(
+                  fontSize: fuerte ? 15 : 13,
+                  fontWeight: fuerte ? FontWeight.w700 : FontWeight.w400,
+                  color: AppColors.cafeOscuro)),
+          Text(b,
+              style: GoogleFonts.inter(
+                  fontSize: fuerte ? 15 : 13,
+                  fontWeight: fuerte ? FontWeight.w700 : FontWeight.w500,
+                  color: AppColors.cafeOscuro)),
+        ]),
+      );
 }

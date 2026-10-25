@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/pedido_service.dart';
+import '../../services/tiempo_real_service.dart';
 import '../../theme/app_theme.dart';
 
 class AdminPedidosScreen extends StatefulWidget {
@@ -16,14 +19,35 @@ class _AdminPedidosScreenState extends State<AdminPedidosScreen> {
   bool _cargando = true;
   String? _error;
 
+  late final TiempoRealConexion _tiempoReal;
+  StreamSubscription<Map<String, dynamic>>? _suscripcion;
+
   @override
   void initState() {
     super.initState();
     _cargarPedidos();
+    // Tiempo real: cuando llega un pedido nuevo o cambia uno, recarga en silencio
+    _tiempoReal = TiempoRealConexion('pedidos')..conectar();
+    _suscripcion = _tiempoReal.eventos.listen((evento) {
+      final tipo = evento['tipo'] as String? ?? '';
+      if (tipo.startsWith('pedido_')) {
+        _cargarPedidos(silencioso: true);
+        if (tipo == 'pedido_nuevo' && mounted) {
+          _snack(evento['mensaje'] as String? ?? 'Nuevo pedido');
+        }
+      }
+    });
   }
 
-  Future<void> _cargarPedidos() async {
-    setState(() { _cargando = true; _error = null; });
+  @override
+  void dispose() {
+    _suscripcion?.cancel();
+    _tiempoReal.cerrar();
+    super.dispose();
+  }
+
+  Future<void> _cargarPedidos({bool silencioso = false}) async {
+    if (!silencioso) setState(() { _cargando = true; _error = null; });
     final resultado = await PedidoService.todosPedidos();
     if (!mounted) return;
     setState(() {

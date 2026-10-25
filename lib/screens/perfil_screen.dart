@@ -7,6 +7,9 @@ import '../utils/app_strings.dart';
 import 'login_screen.dart';
 import 'cliente_facturas_screen.dart';
 import 'pedidos_screen.dart';
+import '../services/clientes_service.dart';
+import '../services/inventario_service.dart' show InvExito;
+import '../utils/formato.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -19,6 +22,20 @@ class _PerfilScreenState extends State<PerfilScreen> {
   bool _notifPedidos = true;
   bool _notifPromos = true;
   bool _notifReservas = false;
+
+  ResumenClienteApi? _resumen;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarResumen();
+  }
+
+  Future<void> _cargarResumen() async {
+    final r = await ClientesService.resumen();
+    if (!mounted) return;
+    if (r is InvExito<ResumenClienteApi>) setState(() => _resumen = r.datos);
+  }
 
   Future<void> _cerrarSesion() async {
     final confirmar = await showDialog<bool>(
@@ -103,15 +120,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   void _mostrarFavoritos() {
     _abrirHoja(
       titulo: 'Tus favoritos',
-      contenido: const Column(
-        children: [
-          _ItemFavorito(emoji: '🍝', nombre: 'Pasta al pesto', precio: '\$28.500'),
-          _ItemFavorito(emoji: '🐟', nombre: 'Salmón a las hierbas', precio: '\$38.500'),
-          _ItemFavorito(emoji: '🍰', nombre: 'Tiramisú casero', precio: '\$14.000'),
-          _ItemFavorito(emoji: '🥥', nombre: 'Limonada de coco', precio: '\$9.500'),
-          _ItemFavorito(emoji: '🍚', nombre: 'Risotto de hongos', precio: '\$32.000'),
-        ],
-      ),
+      contenido: _FavoritosLista(onCambio: _cargarResumen),
     );
   }
 
@@ -573,6 +582,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
     final fechaReg = usuario?.fechaRegistro;
     final anoReg = fechaReg?.year.toString() ?? '—';
     final conDatos = usuario?.conDatos ?? false;
+    final res = _resumen;
+    final visitas = res?.visitas ?? 0;
+    final meta = res?.visitasSiguiente;
 
     return Scaffold(
       body: SafeArea(
@@ -678,7 +690,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Oro',
+                              res?.nivel ?? '—',
                               style: GoogleFonts.playfairDisplay(
                                   fontSize: 14,
                                   fontStyle: FontStyle.italic,
@@ -699,19 +711,19 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 children: [
                   Expanded(
                       child: _EstadisticaTarjeta(
-                          valor: conDatos ? '12' : '0',
+                          valor: '$visitas',
                           etiqueta:
                               AppStrings.t(context, 'visitas'))),
                   const SizedBox(width: 10),
                   Expanded(
                       child: _EstadisticaTarjeta(
-                          valor: conDatos ? '4.8' : '—',
+                          valor: res?.calificacionPromedio?.toStringAsFixed(1) ?? '—',
                           etiqueta:
                               AppStrings.t(context, 'calif_prom'))),
                   const SizedBox(width: 10),
                   Expanded(
                       child: _EstadisticaTarjeta(
-                          valor: conDatos ? '5' : '0',
+                          valor: '${res?.favoritos ?? 0}',
                           etiqueta:
                               AppStrings.t(context, 'favoritos').toUpperCase())),
                 ],
@@ -738,7 +750,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             color: Color(0xFFD9B896), size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'PROGRESO A NIVEL PLATINO',
+                          res?.siguienteNivel != null
+                              ? 'PROGRESO A NIVEL ${res!.siguienteNivel!.toUpperCase()}'
+                              : 'NIVEL MÁXIMO',
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             letterSpacing: 1.2,
@@ -753,7 +767,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '12',
+                          '$visitas',
                           style: GoogleFonts.playfairDisplay(
                             fontSize: 34,
                             fontWeight: FontWeight.w600,
@@ -761,7 +775,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                           ),
                         ),
                         Text(
-                          '/20 visitas',
+                          meta != null ? '/$meta visitas' : ' visitas',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: AppColors.cremaOscura,
@@ -773,7 +787,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: LinearProgressIndicator(
-                        value: 12 / 20,
+                        value: (meta != null && meta > 0)
+                            ? (visitas / meta).clamp(0.0, 1.0)
+                            : 1.0,
                         minHeight: 7,
                         backgroundColor:
                             AppColors.crema.withValues(alpha: 0.15),
@@ -783,7 +799,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Te faltan 8 visitas para subir de nivel y desbloquear ventajas exclusivas.',
+                      meta != null
+                          ? 'Te faltan ${meta - visitas} visitas pagadas para subir de nivel.'
+                          : '¡Alcanzaste el nivel más alto! Gracias por tu fidelidad.',
                       style: GoogleFonts.inter(
                         fontSize: 11.5,
                         color: AppColors.cremaOscura,
@@ -809,7 +827,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         )),
                 _OpcionMenu(Icons.description_outlined,
                     AppStrings.t(context, 'mis_facturas'),
-                    valor: conDatos ? '5' : '0',
+                    valor: '${res?.facturas ?? 0}',
                     onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -818,15 +836,13 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         )),
                 _OpcionMenu(Icons.favorite_border,
                     AppStrings.t(context, 'favoritos'),
-                    valor: conDatos ? '5' : '0',
+                    valor: '${res?.favoritos ?? 0}',
                     onTap: _mostrarFavoritos),
                 _OpcionMenu(Icons.credit_card_outlined,
                     AppStrings.t(context, 'metodos_pago'),
-                    valor: conDatos ? '2' : '0',
                     onTap: _mostrarMetodosPago),
                 _OpcionMenu(Icons.location_on_outlined,
                     AppStrings.t(context, 'direcciones'),
-                    valor: conDatos ? '2' : '0',
                     onTap: _mostrarDirecciones),
               ]),
 
@@ -1012,14 +1028,98 @@ class _OpcionMenu {
   _OpcionMenu(this.icono, this.titulo, {this.valor, this.onTap});
 }
 
+class _FavoritosLista extends StatefulWidget {
+  final VoidCallback onCambio;
+  const _FavoritosLista({required this.onCambio});
+
+  @override
+  State<_FavoritosLista> createState() => _FavoritosListaState();
+}
+
+class _FavoritosListaState extends State<_FavoritosLista> {
+  List<FavoritoApi>? _items;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    final r = await ClientesService.favoritos();
+    if (!mounted) return;
+    setState(() {
+      if (r is InvExito<List<FavoritoApi>>) {
+        _items = r.datos;
+        _error = null;
+      } else {
+        _error = 'No se pudieron cargar tus favoritos';
+      }
+    });
+  }
+
+  Future<void> _quitar(FavoritoApi f) async {
+    setState(() =>
+        _items = _items!.where((x) => x.productoId != f.productoId).toList());
+    await ClientesService.quitarFavorito(f.productoId);
+    widget.onCambio();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+            child: Text(_error!,
+                style: GoogleFonts.inter(color: AppColors.cafeMedio))),
+      );
+    }
+    final items = _items;
+    if (items == null) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+            child: CircularProgressIndicator(color: AppColors.terracota)),
+      );
+    }
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            'Aún no tienes favoritos.\nToca el corazón en un plato para guardarlo aquí.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+                fontSize: 13, color: AppColors.cafeMedio, height: 1.5),
+          ),
+        ),
+      );
+    }
+    return Column(
+      children: items
+          .map((f) => _ItemFavorito(
+                emoji: f.emoji,
+                nombre: f.nombre,
+                precio: moneda(f.precio),
+                onQuitar: () => _quitar(f),
+              ))
+          .toList(),
+    );
+  }
+}
+
 class _ItemFavorito extends StatelessWidget {
   final String emoji;
   final String nombre;
   final String precio;
+  final VoidCallback onQuitar;
   const _ItemFavorito({
     required this.emoji,
     required this.nombre,
     required this.precio,
+    required this.onQuitar,
   });
 
   @override
@@ -1041,7 +1141,8 @@ class _ItemFavorito extends StatelessWidget {
               color: AppColors.terracota.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26))),
+            child:
+                Center(child: Text(emoji, style: const TextStyle(fontSize: 26))),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1062,7 +1163,12 @@ class _ItemFavorito extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.favorite, color: AppColors.terracota, size: 20),
+          IconButton(
+            tooltip: 'Quitar de favoritos',
+            onPressed: onQuitar,
+            icon: const Icon(Icons.favorite,
+                color: AppColors.terracota, size: 22),
+          ),
         ],
       ),
     );

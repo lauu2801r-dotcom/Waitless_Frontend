@@ -1,6 +1,33 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/inventario_service.dart';
+import '../../services/tiempo_real_service.dart';
 import '../../theme/app_theme.dart';
+import 'admin_compras_screen.dart';
+
+String _fmt(double n) {
+  if (n == n.roundToDouble()) return n.toStringAsFixed(0);
+  return n.toStringAsFixed(1);
+}
+
+String _moneda(double n) {
+  final t = n.round().toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+  return '\$$t';
+}
+
+String _fechaHora(DateTime? d) {
+  if (d == null) return '';
+  final hoy = DateTime.now();
+  final h = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  final mismoDia = (DateTime x, DateTime y) =>
+      x.year == y.year && x.month == y.month && x.day == y.day;
+  if (mismoDia(d, hoy)) return 'Hoy $h';
+  if (mismoDia(d, hoy.subtract(const Duration(days: 1)))) return 'Ayer $h';
+  return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} $h';
+}
 
 class AdminInventarioScreen extends StatefulWidget {
   const AdminInventarioScreen({super.key});
@@ -13,98 +40,63 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
   String _categoriaActiva = 'Todos';
   String _busqueda = '';
 
-  final List<_ItemInventario> _items = const [
-    _ItemInventario(
-      nombre: 'Harina de trigo',
-      categoria: 'Ingredientes',
-      stock: 12.5,
-      minimo: 15,
-      unidad: 'kg',
-      emoji: '🌾',
-      proveedor: 'Molinos del Sur',
-    ),
-    _ItemInventario(
-      nombre: 'Tomate fresco',
-      categoria: 'Ingredientes',
-      stock: 8,
-      minimo: 10,
-      unidad: 'kg',
-      emoji: '🍅',
-      proveedor: 'Plaza de Mercado',
-    ),
-    _ItemInventario(
-      nombre: 'Queso mozzarella',
-      categoria: 'Ingredientes',
-      stock: 5.2,
-      minimo: 8,
-      unidad: 'kg',
-      emoji: '🧀',
-      proveedor: 'Lácteos Andinos',
-    ),
-    _ItemInventario(
-      nombre: 'Carne de res',
-      categoria: 'Ingredientes',
-      stock: 22,
-      minimo: 12,
-      unidad: 'kg',
-      emoji: '🥩',
-      proveedor: 'Frigorífico Central',
-    ),
-    _ItemInventario(
-      nombre: 'Pollo',
-      categoria: 'Ingredientes',
-      stock: 0,
-      minimo: 10,
-      unidad: 'kg',
-      emoji: '🍗',
-      proveedor: 'Avícola Nacional',
-    ),
-    _ItemInventario(
-      nombre: 'Cerveza artesanal',
-      categoria: 'Bebidas',
-      stock: 48,
-      minimo: 24,
-      unidad: 'botellas',
-      emoji: '🍺',
-      proveedor: 'Cervecería Local',
-    ),
-    _ItemInventario(
-      nombre: 'Vino tinto reserva',
-      categoria: 'Bebidas',
-      stock: 18,
-      minimo: 12,
-      unidad: 'botellas',
-      emoji: '🍷',
-      proveedor: 'Bodega del Valle',
-    ),
-    _ItemInventario(
-      nombre: 'Agua mineral',
-      categoria: 'Bebidas',
-      stock: 6,
-      minimo: 20,
-      unidad: 'botellas',
-      emoji: '💧',
-      proveedor: 'Distribuidora H2O',
-    ),
-    _ItemInventario(
-      nombre: 'Servilletas',
-      categoria: 'Insumos',
-      stock: 450,
-      minimo: 200,
-      unidad: 'unidades',
-      emoji: '🧻',
-      proveedor: 'Papelería Express',
-    ),
-    _ItemInventario(
-      nombre: 'Aceite de oliva',
-      categoria: 'Ingredientes',
-      stock: 9.5,
-      minimo: 5,
-      unidad: 'litros',
-      emoji: '🫒',
-      proveedor: 'Importadora Mediterránea',
-    ),
-  ];
+  List<_ItemInventario> _items = [];
+  bool _cargando = true;
+  String? _error;
+
+  late final TiempoRealConexion _tiempoReal;
+  StreamSubscription<Map<String, dynamic>>? _suscripcion;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+    // Tiempo real: si alguien registra un movimiento, la lista se actualiza sola.
+    _tiempoReal = TiempoRealConexion('dashboard')..conectar();
+    _suscripcion = _tiempoReal.eventos.listen((evento) {
+      final tipo = evento['tipo'] as String? ?? '';
+      if (tipo == 'inventario_actualizado' || tipo == 'stock_bajo') {
+        _cargar(silencioso: true);
+      }
+      if (tipo == 'stock_bajo' && mounted) {
+        _snack(evento['mensaje'] as String? ?? 'Stock bajo');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _suscripcion?.cancel();
+    _tiempoReal.cerrar();
+    super.dispose();
+  }
+
+  Future<void> _cargar({bool silencioso = false}) async {
+    if (!silencioso) {
+      setState(() {
+        _cargando = true;
+        _error = null;
+      });
+    }
+    final r = await InventarioService.insumos();
+    if (!mounted) return;
+    setState(() {
+      _cargando = false;
+      if (r is InvExito<List<InsumoApi>>) {
+        _items = r.datos.map(_ItemInventario.new).toList();
+        _error = null;
+      } else if (r is InvError<List<InsumoApi>>) {
+        if (!silencioso) _error = r.mensaje;
+      }
+    });
+  }
+
+  void _snack(String mensaje, {bool error = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(mensaje),
+      backgroundColor: error ? AppColors.terracotaOscuro : null,
+    ));
+  }
 
   List<String> get _categorias =>
       ['Todos', ...{for (final i in _items) i.categoria}];
@@ -120,9 +112,22 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
   }
 
   int get _totalItems => _items.length;
-  int get _bajoStock =>
-      _items.where((i) => i.stock > 0 && i.stock < i.minimo).length;
-  int get _agotados => _items.where((i) => i.stock == 0).length;
+  int get _bajoStock => _items.where((i) => i.estado == _EstadoStock.bajo).length;
+  int get _agotados => _items.where((i) => i.estado == _EstadoStock.agotado).length;
+  double get _valorTotal => _items.fold(0.0, (s, i) => s + i.valor);
+
+  // ── Registrar entrada / salida ──
+  Future<void> _registrarMovimiento(_ItemInventario item, bool esEntrada) async {
+    // El cuadro devuelve la cantidad registrada (o null si se canceló).
+    final cantidad = await showDialog<double>(
+      context: context,
+      builder: (_) => _DialogoMovimiento(item: item, esEntrada: esEntrada),
+    );
+    if (cantidad == null || !mounted) return;
+    _snack('${esEntrada ? 'Entrada' : 'Salida'} registrada: '
+        '${_fmt(cantidad)} ${item.unidad} de ${item.nombre}');
+    _cargar(silencioso: true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -147,6 +152,14 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.local_shipping_outlined, color: AppColors.terracota),
+            tooltip: 'Compras y proveedores',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminComprasScreen()),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.history, color: AppColors.terracota),
             tooltip: 'Movimientos',
             onPressed: () => _abrirMovimientos(context),
@@ -157,7 +170,10 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
         child: Column(
           children: [
             Expanded(
-              child: SingleChildScrollView(
+              child: RefreshIndicator(
+                onRefresh: () => _cargar(silencioso: true),
+                child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +185,7 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Tu inventario en tiempo real',
+                      'Valor en bodega: ${_moneda(_valorTotal)}',
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         color: AppColors.cafeMedio,
@@ -281,7 +297,14 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
                     const SizedBox(height: 18),
 
                     // ── Lista de items ──
-                    if (filtrados.isEmpty)
+                    if (_cargando)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (_error != null)
+                      _ErrorInventario(mensaje: _error!, onReintentar: _cargar)
+                    else if (filtrados.isEmpty)
                       const _SinResultados()
                     else
                       ...filtrados.map((it) => _TarjetaItem(
@@ -290,6 +313,7 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
                           )),
                   ],
                 ),
+              ),
               ),
             ),
           ],
@@ -313,21 +337,28 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
     );
   }
 
+
   // ── Sheets ─────────────────────────────────────────────────
-  void _abrirDetalle(BuildContext context, _ItemInventario item) {
-    showModalBottomSheet(
+  Future<void> _abrirDetalle(BuildContext context, _ItemInventario item) async {
+    // La hoja se cierra devolviendo true (entrada) / false (salida) / null.
+    final esEntrada = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.crema,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => _DetalleItemSheet(item: item),
+      builder: (ctx) => _DetalleItemSheet(
+        item: item,
+        onMover: (entrada) => Navigator.pop(ctx, entrada),
+      ),
     );
+    if (esEntrada == null || !mounted) return;
+    await _registrarMovimiento(item, esEntrada);
   }
 
-  void _abrirNuevoItem(BuildContext context) {
-    showModalBottomSheet(
+  Future<void> _abrirNuevoItem(BuildContext context) async {
+    final creado = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.crema,
@@ -336,6 +367,10 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
       ),
       builder: (ctx) => const _NuevoItemSheet(),
     );
+    if (creado == true) {
+      _snack('Producto agregado al inventario');
+      _cargar(silencioso: true);
+    }
   }
 
   void _abrirMovimientos(BuildContext context) {
@@ -352,31 +387,143 @@ class _AdminInventarioScreenState extends State<AdminInventarioScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// MODELO INTERNO
+// CUADRO ENTRADA / SALIDA (maneja sus propios campos de texto)
+// ─────────────────────────────────────────────────────────────
+class _DialogoMovimiento extends StatefulWidget {
+  final _ItemInventario item;
+  final bool esEntrada;
+  const _DialogoMovimiento({required this.item, required this.esEntrada});
+
+  @override
+  State<_DialogoMovimiento> createState() => _DialogoMovimientoState();
+}
+
+class _DialogoMovimientoState extends State<_DialogoMovimiento> {
+  final _cantidadCtrl = TextEditingController();
+  final _motivoCtrl = TextEditingController();
+  String? _error;
+  bool _enviando = false;
+
+  @override
+  void dispose() {
+    _cantidadCtrl.dispose();
+    _motivoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _registrar() async {
+    final cantidad =
+        double.tryParse(_cantidadCtrl.text.trim().replaceAll(',', '.'));
+    if (cantidad == null || cantidad <= 0) {
+      setState(() => _error = 'Escribe una cantidad mayor que 0');
+      return;
+    }
+    setState(() {
+      _error = null;
+      _enviando = true;
+    });
+    final r = await InventarioService.registrarMovimiento(
+      insumoId: widget.item.id,
+      esEntrada: widget.esEntrada,
+      cantidad: cantidad,
+      motivo: _motivoCtrl.text,
+    );
+    if (!mounted) return;
+    if (r is InvError<MovimientoApi>) {
+      setState(() {
+        _error = r.mensaje;
+        _enviando = false;
+      });
+      return;
+    }
+    Navigator.pop(context, cantidad);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final esEntrada = widget.esEntrada;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        '${esEntrada ? 'Entrada' : 'Salida'} · ${item.nombre}',
+        style: AppTheme.titulo(size: 18),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Hay ${_fmt(item.stock)} ${item.unidad} en bodega',
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.cafeMedio),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _cantidadCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'CANTIDAD (${item.unidad})',
+                errorText: _error,
+                errorMaxLines: 3,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _motivoCtrl,
+              decoration: InputDecoration(
+                labelText: 'MOTIVO (OPCIONAL)',
+                hintText: esEntrada ? 'Ej. Compra semanal' : 'Ej. Uso en cocina',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _enviando ? null : () => Navigator.pop(context),
+          child: Text('Cancelar',
+              style: GoogleFonts.inter(color: AppColors.cafeMedio)),
+        ),
+        TextButton(
+          onPressed: _enviando ? null : _registrar,
+          child: Text(
+            _enviando ? 'Guardando…' : 'Registrar',
+            style: GoogleFonts.inter(
+                color: AppColors.terracota, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODELO INTERNO (envuelve lo que manda el servidor)
 // ─────────────────────────────────────────────────────────────
 class _ItemInventario {
-  final String nombre;
-  final String categoria;
-  final double stock;
-  final double minimo;
-  final String unidad;
-  final String emoji;
-  final String proveedor;
+  final InsumoApi api;
+  const _ItemInventario(this.api);
 
-  const _ItemInventario({
-    required this.nombre,
-    required this.categoria,
-    required this.stock,
-    required this.minimo,
-    required this.unidad,
-    required this.emoji,
-    required this.proveedor,
-  });
+  int get id => api.id;
+  String get nombre => api.nombre;
+  String get categoria => api.categoria;
+  double get stock => api.stockActual;
+  double get minimo => api.stockMinimo;
+  String get unidad => api.unidad;
+  String get emoji => api.emoji;
+  String get proveedor => api.proveedorNombre ?? 'Sin proveedor';
+  double get valor => api.valor;
 
   _EstadoStock get estado {
-    if (stock == 0) return _EstadoStock.agotado;
-    if (stock < minimo) return _EstadoStock.bajo;
-    return _EstadoStock.ok;
+    switch (api.estado) {
+      case 'agotado':
+        return _EstadoStock.agotado;
+      case 'bajo':
+        return _EstadoStock.bajo;
+      default:
+        return _EstadoStock.ok;
+    }
   }
 
   double get porcentaje {
@@ -565,11 +712,6 @@ class _TarjetaItem extends StatelessWidget {
 
   const _TarjetaItem({required this.item, required this.onTap});
 
-  String _fmt(double n) {
-    if (n == n.roundToDouble()) return n.toStringAsFixed(0);
-    return n.toStringAsFixed(1);
-  }
-
   @override
   Widget build(BuildContext context) {
     final estado = item.estado;
@@ -747,17 +889,46 @@ class _SinResultados extends StatelessWidget {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// ERROR
+// ─────────────────────────────────────────────────────────────
+class _ErrorInventario extends StatelessWidget {
+  final String mensaje;
+  final VoidCallback onReintentar;
+  const _ErrorInventario({required this.mensaje, required this.onReintentar});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.alertaFondo,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_off, color: AppColors.alertaTexto, size: 32),
+          const SizedBox(height: 8),
+          Text(mensaje,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.alertaTexto)),
+          const SizedBox(height: 12),
+          OutlinedButton(onPressed: onReintentar, child: const Text('Reintentar')),
+        ],
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHEET DETALLE ITEM
 // ─────────────────────────────────────────────────────────────
 class _DetalleItemSheet extends StatelessWidget {
   final _ItemInventario item;
-  const _DetalleItemSheet({required this.item});
-
-  String _fmt(double n) {
-    if (n == n.roundToDouble()) return n.toStringAsFixed(0);
-    return n.toStringAsFixed(1);
-  }
+  final void Function(bool esEntrada) onMover;
+  const _DetalleItemSheet({required this.item, required this.onMover});
 
   @override
   Widget build(BuildContext context) {
@@ -793,8 +964,7 @@ class _DetalleItemSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Center(
-                  child: Text(item.emoji,
-                      style: const TextStyle(fontSize: 38)),
+                  child: Text(item.emoji, style: const TextStyle(fontSize: 38)),
                 ),
               ),
             ),
@@ -808,10 +978,7 @@ class _DetalleItemSheet extends StatelessWidget {
             Text(
               item.categoria,
               textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: AppColors.cafeMedio,
-              ),
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.cafeMedio),
             ),
             const SizedBox(height: 20),
             Container(
@@ -832,11 +999,7 @@ class _DetalleItemSheet extends StatelessWidget {
                           color: estado.color,
                         ),
                       ),
-                      Container(
-                        width: 1,
-                        height: 32,
-                        color: AppColors.borde,
-                      ),
+                      Container(width: 1, height: 32, color: AppColors.borde),
                       Expanded(
                         child: _DatoColumna(
                           titulo: 'MÍNIMO',
@@ -853,8 +1016,7 @@ class _DetalleItemSheet extends StatelessWidget {
                       value: item.porcentaje,
                       minHeight: 8,
                       backgroundColor: AppColors.bordeSuave,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(estado.color),
+                      valueColor: AlwaysStoppedAnimation<Color>(estado.color),
                     ),
                   ),
                 ],
@@ -864,13 +1026,14 @@ class _DetalleItemSheet extends StatelessWidget {
             _FilaInfo(label: 'Proveedor', valor: item.proveedor),
             _FilaInfo(label: 'Categoría', valor: item.categoria),
             _FilaInfo(label: 'Unidad de medida', valor: item.unidad),
-            const _FilaInfo(label: 'Último movimiento', valor: 'Hace 2 horas'),
+            _FilaInfo(label: 'Costo por unidad', valor: _moneda(item.api.costoUnitario)),
+            _FilaInfo(label: 'Valor en bodega', valor: _moneda(item.valor)),
             const SizedBox(height: 22),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => onMover(false),
                     icon: const Icon(Icons.remove, size: 18),
                     label: const Text('Salida'),
                     style: OutlinedButton.styleFrom(
@@ -888,7 +1051,7 @@ class _DetalleItemSheet extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => onMover(true),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Entrada'),
                   ),
@@ -967,18 +1130,94 @@ class _FilaInfo extends StatelessWidget {
   }
 }
 
+
 // ─────────────────────────────────────────────────────────────
 // SHEET NUEVO ITEM
 // ─────────────────────────────────────────────────────────────
-class _NuevoItemSheet extends StatelessWidget {
+class _NuevoItemSheet extends StatefulWidget {
   const _NuevoItemSheet();
+
+  @override
+  State<_NuevoItemSheet> createState() => _NuevoItemSheetState();
+}
+
+class _NuevoItemSheetState extends State<_NuevoItemSheet> {
+  final _nombre = TextEditingController();
+  final _categoria = TextEditingController(text: 'Ingredientes');
+  final _unidad = TextEditingController();
+  final _stock = TextEditingController(text: '0');
+  final _minimo = TextEditingController(text: '0');
+  final _costo = TextEditingController(text: '0');
+  List<ProveedorApi> _proveedores = [];
+  int? _proveedorId;
+  String? _error;
+  bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    InventarioService.proveedores().then((r) {
+      if (!mounted) return;
+      if (r is InvExito<List<ProveedorApi>>) setState(() => _proveedores = r.datos);
+    });
+  }
+
+  @override
+  void dispose() {
+    _nombre.dispose();
+    _categoria.dispose();
+    _unidad.dispose();
+    _stock.dispose();
+    _minimo.dispose();
+    _costo.dispose();
+    super.dispose();
+  }
+
+  double? _num(TextEditingController c) =>
+      double.tryParse(c.text.trim().replaceAll(',', '.'));
+
+  Future<void> _guardar() async {
+    final nombre = _nombre.text.trim();
+    final unidad = _unidad.text.trim();
+    final stock = _num(_stock);
+    final minimo = _num(_minimo);
+    final costo = _num(_costo);
+
+    if (nombre.isEmpty) return setState(() => _error = 'Escribe el nombre del producto');
+    if (_categoria.text.trim().isEmpty) return setState(() => _error = 'Escribe la categoría');
+    if (unidad.isEmpty) return setState(() => _error = 'Escribe la unidad (kg, litros, unidades…)');
+    if (stock == null || stock < 0) return setState(() => _error = 'El stock inicial no es válido');
+    if (minimo == null || minimo < 0) return setState(() => _error = 'El stock mínimo no es válido');
+    if (costo == null || costo < 0) return setState(() => _error = 'El costo no es válido');
+
+    setState(() {
+      _error = null;
+      _guardando = true;
+    });
+    final r = await InventarioService.crearInsumo(
+      nombre: nombre,
+      categoria: _categoria.text.trim(),
+      unidad: unidad,
+      stockInicial: stock,
+      stockMinimo: minimo,
+      costoUnitario: costo,
+      proveedorId: _proveedorId,
+    );
+    if (!mounted) return;
+    if (r is InvError<InsumoApi>) {
+      setState(() {
+        _error = r.mensaje;
+        _guardando = false;
+      });
+      return;
+    }
+    Navigator.pop(context, true);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
         child: Column(
@@ -996,74 +1235,107 @@ class _NuevoItemSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Text(
-              'Nuevo producto',
-              style: AppTheme.titulo(size: 22),
-            ),
+            Text('Nuevo producto', style: AppTheme.titulo(size: 22)),
             const SizedBox(height: 4),
             Text(
               'Agrega un ingrediente, bebida o insumo a tu inventario.',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: AppColors.cafeMedio,
-              ),
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.cafeMedio),
             ),
             const SizedBox(height: 20),
-            const TextField(
-              decoration: InputDecoration(
+            TextField(
+              controller: _nombre,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
                 labelText: 'NOMBRE DEL PRODUCTO',
                 hintText: 'Ej. Tomate fresco',
               ),
             ),
             const SizedBox(height: 12),
-            const TextField(
-              decoration: InputDecoration(
+            TextField(
+              controller: _categoria,
+              decoration: const InputDecoration(
                 labelText: 'CATEGORÍA',
                 hintText: 'Ingredientes / Bebidas / Insumos',
               ),
             ),
             const SizedBox(height: 12),
-            const Row(
+            Row(
               children: [
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'STOCK INICIAL',
-                      hintText: '0',
-                    ),
-                    keyboardType: TextInputType.number,
+                    controller: _stock,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'STOCK INICIAL'),
                   ),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(
+                    controller: _unidad,
+                    decoration: const InputDecoration(
                       labelText: 'UNIDAD',
-                      hintText: 'kg / unid.',
+                      hintText: 'kg / unidades',
                     ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'STOCK MÍNIMO',
-                hintText: 'Te alertaremos al llegar a este valor',
-              ),
-              keyboardType: TextInputType.number,
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _minimo,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'STOCK MÍNIMO',
+                      hintText: 'Alerta al llegar aquí',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _costo,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'COSTO POR UNIDAD',
+                      prefixText: '\$ ',
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'PROVEEDOR (OPCIONAL)',
-                hintText: 'Nombre del proveedor',
-              ),
+            DropdownButtonFormField<int?>(
+              value: _proveedorId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'PROVEEDOR (OPCIONAL)'),
+              items: [
+                const DropdownMenuItem<int?>(value: null, child: Text('Sin proveedor')),
+                ..._proveedores.map(
+                  (p) => DropdownMenuItem<int?>(value: p.id, child: Text(p.nombre)),
+                ),
+              ],
+              onChanged: (v) => setState(() => _proveedorId = v),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.terracotaOscuro,
+                    fontWeight: FontWeight.w600),
+              ),
+            ],
             const SizedBox(height: 22),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('AGREGAR PRODUCTO'),
+              onPressed: _guardando ? null : _guardar,
+              child: Text(_guardando ? 'GUARDANDO…' : 'AGREGAR PRODUCTO'),
             ),
           ],
         ),
@@ -1072,27 +1344,103 @@ class _NuevoItemSheet extends StatelessWidget {
   }
 }
 
+
 // ─────────────────────────────────────────────────────────────
-// SHEET MOVIMIENTOS
+// SHEET MOVIMIENTOS (historial real)
 // ─────────────────────────────────────────────────────────────
-class _MovimientosSheet extends StatelessWidget {
+class _MovimientosSheet extends StatefulWidget {
   const _MovimientosSheet();
 
   @override
-  Widget build(BuildContext context) {
-    final movimientos = [
-      ('Entrada · Tomate fresco', '+5 kg', 'Hoy 10:24', true),
-      ('Salida · Queso mozzarella', '-1.2 kg', 'Hoy 09:15', false),
-      ('Entrada · Carne de res', '+8 kg', 'Ayer 18:40', true),
-      ('Salida · Aceite de oliva', '-0.5 lt', 'Ayer 14:20', false),
-      ('Entrada · Vino tinto reserva', '+12 botellas', 'Ayer 11:08', true),
-      ('Salida · Cerveza artesanal', '-6 botellas', 'Ayer 09:33', false),
-    ];
+  State<_MovimientosSheet> createState() => _MovimientosSheetState();
+}
 
+class _MovimientosSheetState extends State<_MovimientosSheet> {
+  List<MovimientoApi> _movs = [];
+  bool _cargando = true;
+  String? _error;
+  bool? _soloEntradas; // null = todos
+  DateTimeRange? _rango;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
+    final r = await InventarioService.movimientos(
+      soloEntradas: _soloEntradas,
+      desde: _rango?.start,
+      // incluir todo el último día del rango
+      hasta: _rango == null
+          ? null
+          : DateTime(_rango!.end.year, _rango!.end.month, _rango!.end.day, 23, 59, 59),
+    );
+    if (!mounted) return;
+    setState(() {
+      _cargando = false;
+      if (r is InvExito<List<MovimientoApi>>) {
+        _movs = r.datos;
+      } else if (r is InvError<List<MovimientoApi>>) {
+        _error = r.mensaje;
+      }
+    });
+  }
+
+  Future<void> _elegirRango() async {
+    final hoy = DateTime.now();
+    final r = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(hoy.year - 2),
+      lastDate: hoy,
+      initialDateRange: _rango,
+    );
+    if (r != null) {
+      _rango = r;
+      _cargar();
+    }
+  }
+
+  Widget _chip(String texto, bool? valor) {
+    final activo = _soloEntradas == valor;
+    return GestureDetector(
+      onTap: () {
+        _soloEntradas = valor;
+        _cargar();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: activo ? AppColors.terracota : AppColors.superficie,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: activo ? AppColors.terracota : AppColors.borde),
+        ),
+        child: Text(
+          texto,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: activo ? AppColors.crema : AppColors.cafeOscuro,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _fechaCorta(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.7,
+      initialChildSize: 0.8,
       minChildSize: 0.4,
-      maxChildSize: 0.92,
+      maxChildSize: 0.95,
       expand: false,
       builder: (_, controller) => Column(
         children: [
@@ -1110,7 +1458,7 @@ class _MovimientosSheet extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
             child: Row(
               children: [
                 Container(
@@ -1120,95 +1468,145 @@ class _MovimientosSheet extends StatelessWidget {
                     color: AppColors.terracota.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.history,
-                    color: AppColors.terracota,
-                    size: 20,
-                  ),
+                  child: const Icon(Icons.history, color: AppColors.terracota, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    'Movimientos recientes',
-                    style: AppTheme.titulo(size: 20),
-                  ),
+                  child: Text('Historial de movimientos', style: AppTheme.titulo(size: 20)),
                 ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _chip('Todos', null),
+                _chip('Entradas', true),
+                _chip('Salidas', false),
+                ActionChip(
+                  avatar: const Icon(Icons.date_range, size: 16),
+                  label: Text(_rango == null
+                      ? 'Rango de fechas'
+                      : '${_fechaCorta(_rango!.start)} – ${_fechaCorta(_rango!.end)}'),
+                  onPressed: _elegirRango,
+                ),
+                if (_rango != null)
+                  ActionChip(
+                    label: const Text('Quitar fechas'),
+                    onPressed: () {
+                      _rango = null;
+                      _cargar();
+                    },
+                  ),
               ],
             ),
           ),
           const Divider(height: 1, color: AppColors.bordeSuave),
           Expanded(
-            child: ListView.builder(
-              controller: controller,
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              itemCount: movimientos.length,
-              itemBuilder: (_, i) {
-                final (descripcion, cantidad, tiempo, esEntrada) =
-                    movimientos[i];
-                final color =
-                    esEntrada ? AppColors.oliva : AppColors.terracota;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.superficie,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borde),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
+            child: _cargando
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: _ErrorInventario(mensaje: _error!, onReintentar: _cargar),
                         ),
-                        child: Icon(
-                          esEntrada
-                              ? Icons.arrow_downward
-                              : Icons.arrow_upward,
-                          color: color,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              descripcion,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.cafeOscuro,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              tiempo,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: AppColors.cafeMedio,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        cantidad,
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                      )
+                    : _movs.isEmpty
+                        ? Center(
+                            child: Text('Sin movimientos',
+                                style: GoogleFonts.inter(
+                                    fontSize: 13, color: AppColors.cafeMedio)),
+                          )
+                        : ListView.builder(
+                            controller: controller,
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                            itemCount: _movs.length,
+                            itemBuilder: (_, i) => _FilaMovimiento(m: _movs[i]),
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilaMovimiento extends StatelessWidget {
+  final MovimientoApi m;
+  const _FilaMovimiento({required this.m});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = m.esEntrada ? AppColors.oliva : AppColors.terracota;
+    final detalle = [
+      _fechaHora(m.creadoEn),
+      if (m.usuarioEmail != null) m.usuarioEmail!,
+      if (m.motivo != null) m.motivo!,
+    ].where((s) => s.isNotEmpty).join(' · ');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.superficie,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borde),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: Icon(
+              m.esEntrada ? Icons.arrow_downward : Icons.arrow_upward,
+              color: color,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${m.esEntrada ? 'Entrada' : 'Salida'} · ${m.insumoNombre}',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.cafeOscuro,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detalle,
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.cafeMedio),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${m.esEntrada ? '+' : '-'}${_fmt(m.cantidad)} ${m.unidad}',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+              Text(
+                'quedan ${_fmt(m.stockResultante)}',
+                style: GoogleFonts.inter(fontSize: 10, color: AppColors.cafeMedio),
+              ),
+            ],
           ),
         ],
       ),
