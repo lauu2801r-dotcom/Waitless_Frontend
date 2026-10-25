@@ -10,12 +10,10 @@ import 'main_shell.dart';
 
 class VerificacionScreen extends StatefulWidget {
   final String correo;
-  final String? codigoSimulado;
 
   const VerificacionScreen({
     super.key,
     required this.correo,
-    this.codigoSimulado,
   });
 
   @override
@@ -32,12 +30,10 @@ class _VerificacionScreenState extends State<VerificacionScreen> {
 
   Timer? _timer;
   int _segundosRestantes = 60;
-  String? _codigoSimuladoActual;
 
   @override
   void initState() {
     super.initState();
-    _codigoSimuladoActual = widget.codigoSimulado;
     _iniciarCuentaRegresiva();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focos[0].requestFocus();
@@ -111,8 +107,7 @@ class _VerificacionScreenState extends State<VerificacionScreen> {
     final resultado = await auth.reenviarCodigo(widget.correo);
     if (!mounted) return;
     switch (resultado) {
-      case AuthExito(:final datos):
-        setState(() => _codigoSimuladoActual = datos);
+      case AuthExito():
         _iniciarCuentaRegresiva();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -180,49 +175,6 @@ class _VerificacionScreenState extends State<VerificacionScreen> {
                       ],
                     ),
                   ),
-
-                  if (_codigoSimuladoActual != null) ...[
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.olivaFondo,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: AppColors.oliva.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline,
-                              color: AppColors.infoTexto, size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    color: AppColors.infoTexto,
-                                    height: 1.4),
-                                children: [
-                                  const TextSpan(text: 'Modo demo: tu código es '),
-                                  TextSpan(
-                                    text: _codigoSimuladoActual!,
-                                    style: GoogleFonts.robotoMono(
-                                        fontSize: 13,
-                                        color: AppColors.infoTexto,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 2),
-                                  ),
-                                  const TextSpan(
-                                      text: '. Con API real, llegará a tu correo.'),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
 
                   const SizedBox(height: 32),
 

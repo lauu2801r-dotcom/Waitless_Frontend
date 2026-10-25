@@ -3,12 +3,44 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/usuario.dart';
 import 'auth_repository.dart';
-import 'package:flutter/foundation.dart';
 
 class ApiAuthRepository implements AuthRepository {
   static const String _baseUrl = 'http://10.0.2.2:8000';
   static const String _kClaveSesion = 'waitless.sesion_actual';
   static const String _kClaveToken = 'waitless.token';
+  static const Map<String, String> _headersJson = {
+    'Content-Type': 'application/json',
+  };
+
+  // ── Utilidades ──────────────────────────────────────────
+
+  /// Decodifica siempre como UTF-8 (para que las tildes no se dañen).
+  dynamic _decodificar(http.Response r) =>
+      jsonDecode(utf8.decode(r.bodyBytes));
+
+  /// Saca un mensaje legible del error del backend. FastAPI puede devolver
+  /// `detail` como texto (errores nuestros) o como lista (errores 422).
+  String _mensajeError(http.Response r, String porDefecto) {
+    try {
+      final data = _decodificar(r);
+      final detalle = data is Map ? data['detail'] : null;
+      if (detalle is String) return detalle;
+      if (detalle is List && detalle.isNotEmpty) {
+        final primero = detalle.first;
+        if (primero is Map && primero['msg'] is String) {
+          return primero['msg'] as String;
+        }
+      }
+    } catch (_) {}
+    return porDefecto;
+  }
+
+  (String, String) _dividirNombre(String nombreCompleto) {
+    final partes = nombreCompleto.trim().split(RegExp(r'\s+'));
+    final nombre = partes.first;
+    final apellido = partes.length > 1 ? partes.sublist(1).join(' ') : '';
+    return (nombre, apellido);
+  }
 
   Future<void> _guardarSesion(Usuario usuario, String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -23,8 +55,6 @@ class ApiAuthRepository implements AuthRepository {
 
   Usuario _mapearUsuario(Map<String, dynamic> json) {
     final u = json['usuario'] as Map<String, dynamic>;
-    debugPrint('🔍 ROL QUE LLEGA DEL BACKEND: ${u['rol']}');
-    debugPrint('🔍 RESTAURANTE: ${u['nombre_restaurante']}');
     return Usuario(
       id: u['id'].toString(),
       nombreCompleto: '${u['nombre']} ${u['apellido']}',
@@ -33,10 +63,12 @@ class ApiAuthRepository implements AuthRepository {
       correoVerificado: u['verificado'] as bool,
       fechaRegistro: DateTime.parse(u['creado_en'] as String),
       rol: RolUsuarioX.desdeCodigo(u['rol'] as String),
-      nombreRestaurante: u['nombre_restaurante'] as String?, // ✅ nuevo
+      nombreRestaurante: u['nombre_restaurante'] as String?,
       conDatos: true,
     );
   }
+
+  // ── Registro ────────────────────────────────────────────
 
   @override
   Future<AuthResultado<String>> registrarCliente({
@@ -44,30 +76,29 @@ class ApiAuthRepository implements AuthRepository {
     required String correo,
     required String password,
     required String? telefono,
+    required bool aceptaPolitica,
   }) async {
     try {
-      final partes = nombreCompleto.trim().split(' ');
-      final nombre = partes.first;
-      final apellido = partes.length > 1 ? partes.sublist(1).join(' ') : '';
+      final (nombre, apellido) = _dividirNombre(nombreCompleto);
 
       final response = await http.post(
         Uri.parse('$_baseUrl/auth/register'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headersJson,
         body: jsonEncode({
           'nombre': nombre,
           'apellido': apellido,
-          'email': correo,
+          'email': correo.trim(),
           'password': password,
           'telefono': telefono,
+          'rol': 'cliente',
+          'acepta_politica': aceptaPolitica,
         }),
       );
 
       if (response.statusCode == 200) {
         return const AuthExito('Código enviado a tu correo');
-      } else {
-        final error = jsonDecode(response.body);
-        return AuthError(error['detail'] ?? 'Error al registrar');
       }
+      return AuthError(_mensajeError(response, 'Error al registrar'));
     } catch (e) {
       return AuthError('Error de conexión: $e');
     }
@@ -80,36 +111,59 @@ class ApiAuthRepository implements AuthRepository {
     required String password,
     required String nombreRestaurante,
     required String codigoNegocio,
+    required bool aceptaPolitica,
   }) async {
     try {
-      final partes = nombreCompleto.trim().split(' ');
-      final nombre = partes.first;
-      final apellido = partes.length > 1 ? partes.sublist(1).join(' ') : '';
+      final (nombre, apellido) = _dividirNombre(nombreCompleto);
 
       final response = await http.post(
         Uri.parse('$_baseUrl/auth/register'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headersJson,
         body: jsonEncode({
           'nombre': nombre,
           'apellido': apellido,
-          'email': correo,
+          'email': correo.trim(),
           'password': password,
           'rol': 'administrador',
-          'nombre_restaurante': nombreRestaurante, // ✅
-          'codigo_negocio': codigoNegocio,         // ✅
+          'nombre_restaurante': nombreRestaurante.trim(),
+          'codigo_negocio': codigoNegocio.trim(),
+          'acepta_politica': aceptaPolitica,
         }),
       );
 
       if (response.statusCode == 200) {
         return const AuthExito('Código enviado a tu correo');
-      } else {
-        final error = jsonDecode(response.body);
-        return AuthError(error['detail'] ?? 'Error al registrar');
       }
+      return AuthError(_mensajeError(response, 'Error al registrar'));
     } catch (e) {
       return AuthError('Error de conexión: $e');
     }
   }
+
+  @override
+  Future<AuthResultado<PoliticaPrivacidad>> obtenerPolitica() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/auth/politica-privacidad'),
+      );
+      if (response.statusCode == 200) {
+        final data = _decodificar(response) as Map<String, dynamic>;
+        return AuthExito(
+          PoliticaPrivacidad(
+            version: data['version'] as String,
+            titulo: data['titulo'] as String,
+            texto: data['texto'] as String,
+          ),
+        );
+      }
+      return AuthError(
+          _mensajeError(response, 'No se pudo cargar la política'));
+    } catch (e) {
+      return AuthError('Error de conexión: $e');
+    }
+  }
+
+  // ── Verificación y sesión ───────────────────────────────
 
   @override
   Future<AuthResultado<Usuario>> verificarCodigo({
@@ -119,23 +173,18 @@ class ApiAuthRepository implements AuthRepository {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/auth/verify-otp'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': correo,
-          'otp': codigo,
-        }),
+        headers: _headersJson,
+        body: jsonEncode({'email': correo, 'otp': codigo}),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = _decodificar(response) as Map<String, dynamic>;
         final token = data['access_token'] as String;
         final usuario = _mapearUsuario(data);
         await _guardarSesion(usuario, token);
         return AuthExito(usuario);
-      } else {
-        final error = jsonDecode(response.body);
-        return AuthError(error['detail'] ?? 'Código incorrecto');
       }
+      return AuthError(_mensajeError(response, 'Código incorrecto'));
     } catch (e) {
       return AuthError('Error de conexión: $e');
     }
@@ -146,16 +195,14 @@ class ApiAuthRepository implements AuthRepository {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/auth/resend-otp'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headersJson,
         body: jsonEncode({'email': correo}),
       );
 
       if (response.statusCode == 200) {
         return const AuthExito('Código reenviado a tu correo');
-      } else {
-        final error = jsonDecode(response.body);
-        return AuthError(error['detail'] ?? 'Error al reenviar');
       }
+      return AuthError(_mensajeError(response, 'Error al reenviar'));
     } catch (e) {
       return AuthError('Error de conexión: $e');
     }
@@ -169,23 +216,18 @@ class ApiAuthRepository implements AuthRepository {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': correo,
-          'password': password,
-        }),
+        headers: _headersJson,
+        body: jsonEncode({'email': correo.trim(), 'password': password}),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = _decodificar(response) as Map<String, dynamic>;
         final token = data['access_token'] as String;
         final usuario = _mapearUsuario(data);
         await _guardarSesion(usuario, token);
         return AuthExito(usuario);
-      } else {
-        final error = jsonDecode(response.body);
-        return AuthError(error['detail'] ?? 'Credenciales incorrectas');
       }
+      return AuthError(_mensajeError(response, 'Credenciales incorrectas'));
     } catch (e) {
       return AuthError('Error de conexión: $e');
     }

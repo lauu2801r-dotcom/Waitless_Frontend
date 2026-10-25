@@ -1,11 +1,12 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_controller.dart';
 import '../services/auth_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/validadores.dart';
+import '../widgets/politica_sheet.dart';
 import 'verificacion_screen.dart';
-import 'registro_admin_screen.dart';
 
 class RegistroScreen extends StatefulWidget {
   const RegistroScreen({super.key});
@@ -21,6 +22,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
   final _telefonoCtrl = TextEditingController();
   final _pwdCtrl = TextEditingController();
   final _confirmPwdCtrl = TextEditingController();
+  late final TapGestureRecognizer _tapPolitica;
 
   bool _ocultarPwd = true;
   bool _ocultarConfirm = true;
@@ -32,6 +34,8 @@ class _RegistroScreenState extends State<RegistroScreen> {
   @override
   void initState() {
     super.initState();
+    _tapPolitica = TapGestureRecognizer()
+      ..onTap = () => mostrarPoliticaPrivacidad(context);
     _pwdCtrl.addListener(() {
       setState(() {
         _fortaleza = Validadores.fortalezaPassword(_pwdCtrl.text);
@@ -41,6 +45,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
   @override
   void dispose() {
+    _tapPolitica.dispose();
     _nombreCtrl.dispose();
     _correoCtrl.dispose();
     _telefonoCtrl.dispose();
@@ -54,28 +59,29 @@ class _RegistroScreenState extends State<RegistroScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (!_aceptaTerminos) {
       setState(() => _errorGeneral =
-          'Debes aceptar los términos y condiciones para continuar');
+          'Debes aceptar la política de tratamiento de datos personales para continuar');
       return;
     }
 
     setState(() => _cargando = true);
     final auth = AuthScope.of(context);
+    final telefono = _telefonoCtrl.text.trim();
     final resultado = await auth.registrarCliente(
-        nombreCompleto: _nombreCtrl.text,
-        correo: _correoCtrl.text,
-        password: _pwdCtrl.text,
-        telefono: _telefonoCtrl.text.isEmpty ? null : _telefonoCtrl.text,
-      );
+      nombreCompleto: _nombreCtrl.text,
+      correo: _correoCtrl.text,
+      password: _pwdCtrl.text,
+      telefono: telefono.isEmpty ? null : telefono,
+      aceptaPolitica: _aceptaTerminos,
+    );
     if (!mounted) return;
     setState(() => _cargando = false);
 
     switch (resultado) {
-      case AuthExito(:final datos):
+      case AuthExito():
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => VerificacionScreen(
               correo: _correoCtrl.text.trim().toLowerCase(),
-              codigoSimulado: null,
             ),
           ),
         );
@@ -100,15 +106,9 @@ class _RegistroScreenState extends State<RegistroScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Encabezado con botón volver y logo
                     _Encabezado(onVolver: () => Navigator.pop(context)),
                     const SizedBox(height: 20),
-
-                    // Título principal
-                    Text(
-                      'Crea tu cuenta',
-                      style: AppTheme.titulo(size: 30),
-                    ),
+                    Text('Crea tu cuenta', style: AppTheme.titulo(size: 30)),
                     const SizedBox(height: 6),
                     Text(
                       'Únete y reserva tu mesa en los mejores restaurantes.',
@@ -120,13 +120,11 @@ class _RegistroScreenState extends State<RegistroScreen> {
                     ),
                     const SizedBox(height: 28),
 
-                    // Banner de error general
                     if (_errorGeneral != null) ...[
                       _BannerError(mensaje: _errorGeneral!),
                       const SizedBox(height: 16),
                     ],
 
-                    // Tarjeta con el formulario
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -145,11 +143,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Nombre completo
-                          const _EtiquetaCampo(
-                            texto: 'Nombre completo',
-                            icono: Icons.person_outline,
-                          ),
+                          const _EtiquetaCampo(texto: 'Nombre completo'),
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _nombreCtrl,
@@ -158,20 +152,13 @@ class _RegistroScreenState extends State<RegistroScreen> {
                             validator: Validadores.nombreCompleto,
                             decoration: const InputDecoration(
                               hintText: 'Ej. Laura González',
-                              prefixIcon: Icon(
-                                Icons.person_outline,
-                                color: AppColors.cafeMedio,
-                                size: 20,
-                              ),
+                              prefixIcon: Icon(Icons.person_outline,
+                                  color: AppColors.cafeMedio, size: 20),
                             ),
                           ),
                           const SizedBox(height: 18),
 
-                          // Correo electrónico
-                          const _EtiquetaCampo(
-                            texto: 'Correo electrónico',
-                            icono: Icons.mail_outline,
-                          ),
+                          const _EtiquetaCampo(texto: 'Correo electrónico'),
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _correoCtrl,
@@ -180,20 +167,13 @@ class _RegistroScreenState extends State<RegistroScreen> {
                             validator: Validadores.correo,
                             decoration: const InputDecoration(
                               hintText: 'tu@correo.com',
-                              prefixIcon: Icon(
-                                Icons.mail_outline,
-                                color: AppColors.cafeMedio,
-                                size: 20,
-                              ),
+                              prefixIcon: Icon(Icons.mail_outline,
+                                  color: AppColors.cafeMedio, size: 20),
                             ),
                           ),
                           const SizedBox(height: 18),
 
-                          // Teléfono
-                          const _EtiquetaCampo(
-                            texto: 'Teléfono',
-                            icono: Icons.phone_outlined,
-                          ),
+                          const _EtiquetaCampo(texto: 'Teléfono'),
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _telefonoCtrl,
@@ -201,20 +181,13 @@ class _RegistroScreenState extends State<RegistroScreen> {
                             textInputAction: TextInputAction.next,
                             decoration: const InputDecoration(
                               hintText: 'Ej. 3001234567',
-                              prefixIcon: Icon(
-                                Icons.phone_outlined,
-                                color: AppColors.cafeMedio,
-                                size: 20,
-                              ),
+                              prefixIcon: Icon(Icons.phone_outlined,
+                                  color: AppColors.cafeMedio, size: 20),
                             ),
                           ),
                           const SizedBox(height: 18),
 
-                          // Contraseña
-                          const _EtiquetaCampo(
-                            texto: 'Contraseña',
-                            icono: Icons.lock_outline,
-                          ),
+                          const _EtiquetaCampo(texto: 'Contraseña'),
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _pwdCtrl,
@@ -223,11 +196,8 @@ class _RegistroScreenState extends State<RegistroScreen> {
                             validator: Validadores.password,
                             decoration: InputDecoration(
                               hintText: 'Mínimo 8 caracteres',
-                              prefixIcon: const Icon(
-                                Icons.lock_outline,
-                                color: AppColors.cafeMedio,
-                                size: 20,
-                              ),
+                              prefixIcon: const Icon(Icons.lock_outline,
+                                  color: AppColors.cafeMedio, size: 20),
                               suffixIcon: IconButton(
                                 icon: Icon(
                                   _ocultarPwd
@@ -258,11 +228,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
                           ],
                           const SizedBox(height: 18),
 
-                          // Confirmar contraseña
-                          const _EtiquetaCampo(
-                            texto: 'Confirmar contraseña',
-                            icono: Icons.lock_outline,
-                          ),
+                          const _EtiquetaCampo(texto: 'Confirmar contraseña'),
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _confirmPwdCtrl,
@@ -273,11 +239,8 @@ class _RegistroScreenState extends State<RegistroScreen> {
                             onFieldSubmitted: (_) => _registrar(),
                             decoration: InputDecoration(
                               hintText: 'Repite tu contraseña',
-                              prefixIcon: const Icon(
-                                Icons.lock_outline,
-                                color: AppColors.cafeMedio,
-                                size: 20,
-                              ),
+                              prefixIcon: const Icon(Icons.lock_outline,
+                                  color: AppColors.cafeMedio, size: 20),
                               suffixIcon: IconButton(
                                 icon: Icon(
                                   _ocultarConfirm
@@ -286,14 +249,14 @@ class _RegistroScreenState extends State<RegistroScreen> {
                                   color: AppColors.cafeMedio,
                                   size: 20,
                                 ),
-                                onPressed: () => setState(() =>
-                                    _ocultarConfirm = !_ocultarConfirm),
+                                onPressed: () => setState(
+                                    () => _ocultarConfirm = !_ocultarConfirm),
                               ),
                             ),
                           ),
                           const SizedBox(height: 20),
 
-                          // Términos y condiciones
+                          // Aceptación de la política (Ley 1581 de 2012)
                           InkWell(
                             onTap: () => setState(
                                 () => _aceptaTerminos = !_aceptaTerminos),
@@ -323,11 +286,8 @@ class _RegistroScreenState extends State<RegistroScreen> {
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: _aceptaTerminos
-                                        ? const Icon(
-                                            Icons.check,
-                                            color: AppColors.crema,
-                                            size: 16,
-                                          )
+                                        ? const Icon(Icons.check,
+                                            color: AppColors.crema, size: 16)
                                         : null,
                                   ),
                                   const SizedBox(width: 12),
@@ -339,25 +299,22 @@ class _RegistroScreenState extends State<RegistroScreen> {
                                           color: AppColors.cafeOscuro,
                                           height: 1.45,
                                         ),
-                                        children: const [
-                                          TextSpan(text: 'Acepto los '),
+                                        children: [
+                                          const TextSpan(text: 'Acepto la '),
                                           TextSpan(
-                                            text: 'Términos y Condiciones',
-                                            style: TextStyle(
+                                            text:
+                                                'Política de Tratamiento de Datos Personales',
+                                            recognizer: _tapPolitica,
+                                            style: const TextStyle(
                                               color: AppColors.terracota,
                                               fontWeight: FontWeight.w600,
+                                              decoration:
+                                                  TextDecoration.underline,
                                             ),
                                           ),
-                                          TextSpan(text: ' y la '),
-                                          TextSpan(
-                                            text: 'Política de Privacidad',
-                                            style: TextStyle(
-                                              color: AppColors.terracota,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          TextSpan(
-                                              text: ' de WaitLess.'),
+                                          const TextSpan(
+                                              text:
+                                                  ' de WaitLess (Ley 1581 de 2012).'),
                                         ],
                                       ),
                                     ),
@@ -372,7 +329,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
                     const SizedBox(height: 24),
 
-                    // Botón principal
                     SizedBox(
                       height: 54,
                       child: ElevatedButton(
@@ -418,124 +374,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
                     const SizedBox(height: 28),
 
-                    // Separador para el registro de negocio
-                    Row(
-                      children: [
-                        const Expanded(
-                            child: Divider(color: AppColors.borde)),
-                        Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(
-                            '¿ERES UN NEGOCIO?',
-                            style: AppTheme.etiqueta(size: 10),
-                          ),
-                        ),
-                        const Expanded(
-                            child: Divider(color: AppColors.borde)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Tarjeta para registro de administrador
-                    InkWell(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const RegistroAdminScreen(),
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              AppColors.cafeOscuro,
-                              Color(0xFF52341F),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.cafeOscuro
-                                  .withValues(alpha: 0.18),
-                              blurRadius: 18,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: AppColors.terracota
-                                    .withValues(alpha: 0.28),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: AppColors.terracota
-                                      .withValues(alpha: 0.5),
-                                  width: 1,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.storefront_outlined,
-                                color: AppColors.crema,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Registra tu restaurante',
-                                    style: AppTheme.titulo(
-                                      size: 17,
-                                      color: AppColors.crema,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    'Gestiona pedidos, mesas y predicciones',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: AppColors.cremaOscura,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color:
-                                    AppColors.crema.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.arrow_forward_ios,
-                                color: AppColors.crema,
-                                size: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // Enlace iniciar sesión
                     Center(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -548,7 +386,8 @@ class _RegistroScreenState extends State<RegistroScreen> {
                             ),
                           ),
                           GestureDetector(
-                            onTap: () => Navigator.pop(context),
+                            onTap: () => Navigator.of(context)
+                                .popUntil((r) => r.isFirst),
                             child: Text(
                               'Inicia sesión',
                               style: GoogleFonts.inter(
@@ -557,7 +396,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
                                 fontWeight: FontWeight.w600,
                                 decoration: TextDecoration.underline,
                                 decorationColor: AppColors.terracota,
-                                decorationThickness: 1.2,
                               ),
                             ),
                           ),
@@ -576,7 +414,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
   }
 }
 
-/// Encabezado con botón de volver y logo a la derecha.
 class _Encabezado extends StatelessWidget {
   final VoidCallback onVolver;
   const _Encabezado({required this.onVolver});
@@ -586,7 +423,6 @@ class _Encabezado extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Botón volver
         Material(
           color: AppColors.superficie,
           shape: RoundedRectangleBorder(
@@ -599,15 +435,11 @@ class _Encabezado extends StatelessWidget {
             child: const SizedBox(
               width: 44,
               height: 44,
-              child: Icon(
-                Icons.arrow_back_ios_new,
-                size: 16,
-                color: AppColors.cafeOscuro,
-              ),
+              child: Icon(Icons.arrow_back_ios_new,
+                  size: 16, color: AppColors.cafeOscuro),
             ),
           ),
         ),
-        // Logo decorativo
         Container(
           width: 44,
           height: 44,
@@ -624,7 +456,7 @@ class _Encabezado extends StatelessWidget {
           ),
           child: Center(
             child: Text(
-              'S',
+              'W',
               style: GoogleFonts.playfairDisplay(
                 fontSize: 22,
                 fontStyle: FontStyle.italic,
@@ -639,11 +471,9 @@ class _Encabezado extends StatelessWidget {
   }
 }
 
-/// Etiqueta pequeña con tracking encima de cada campo.
 class _EtiquetaCampo extends StatelessWidget {
   final String texto;
-  final IconData icono;
-  const _EtiquetaCampo({required this.texto, required this.icono});
+  const _EtiquetaCampo({required this.texto});
 
   @override
   Widget build(BuildContext context) {
@@ -659,7 +489,6 @@ class _EtiquetaCampo extends StatelessWidget {
   }
 }
 
-/// Medidor visual de fortaleza de la contraseña.
 class _MedidorFortaleza extends StatelessWidget {
   final int nivel;
   const _MedidorFortaleza({required this.nivel});
@@ -673,13 +502,7 @@ class _MedidorFortaleza extends StatelessWidget {
       const Color(0xFFD9B896),
       AppColors.oliva,
     ];
-    final etiquetas = [
-      'Muy débil',
-      'Débil',
-      'Aceptable',
-      'Buena',
-      'Excelente',
-    ];
+    final etiquetas = ['Muy débil', 'Débil', 'Aceptable', 'Buena', 'Excelente'];
     final color = colores[nivel];
     return Row(
       children: [
@@ -714,7 +537,6 @@ class _MedidorFortaleza extends StatelessWidget {
   }
 }
 
-/// Lista visual de requisitos que cumple/no cumple la contraseña.
 class _RequisitosPassword extends StatelessWidget {
   final String password;
   const _RequisitosPassword({required this.password});
@@ -781,17 +603,13 @@ class _BannerError extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.alertaFondo,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: AppColors.terracota.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.terracota.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.error_outline,
-            color: AppColors.terracotaOscuro,
-            size: 20,
-          ),
+          const Icon(Icons.error_outline,
+              color: AppColors.terracotaOscuro, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

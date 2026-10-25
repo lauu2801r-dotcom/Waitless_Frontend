@@ -108,7 +108,6 @@ lib/
 ├── services/
 │   ├── auth_controller.dart         # estado de auth
 │   ├── auth_repository.dart
-│   ├── local_auth_repository.dart   # persistencia con shared_preferences
 │   └── app_settings.dart            # tema + idioma global
 ├── utils/
 │   ├── validadores.dart

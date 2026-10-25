@@ -9,6 +9,7 @@ import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/admin/admin_shell.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,7 +62,7 @@ class WaitLessApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: const _ArranqueInicial(),
+            home: const SplashScreen(destino: _ArranqueInicial()),
           ),
         ),
       ),
@@ -75,19 +76,6 @@ class _ArranqueInicial extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
-
-    // 🔍 DEBUG: Imprime info de la sesión
-    debugPrint('═══════════════════════════════════');
-    debugPrint('🔍 DEBUG SESIÓN:');
-    debugPrint('🔍 Cargando: ${auth.cargando}');
-    debugPrint('🔍 Autenticado: ${auth.estaAutenticado}');
-    debugPrint('🔍 Usuario: ${auth.usuario?.correo}');
-    debugPrint('🔍 Rol: ${auth.usuario?.rol}');
-    debugPrint('🔍 esAdministrador: ${auth.esAdministrador}');
-    debugPrint('🔍 restauranteId: ${auth.usuario?.restauranteId}');
-    debugPrint('🔍 nombreRestaurante: ${auth.usuario?.nombreRestaurante}');
-    debugPrint('═══════════════════════════════════');
-
     if (auth.cargando) {
       return Scaffold(
         backgroundColor: AppColors.crema,

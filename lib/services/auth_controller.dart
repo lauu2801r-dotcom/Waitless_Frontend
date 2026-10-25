@@ -28,12 +28,14 @@ class AuthController extends ChangeNotifier {
     required String correo,
     required String password,
     required String? telefono,
+    required bool aceptaPolitica,
   }) {
     return repositorio.registrarCliente(
       nombreCompleto: nombreCompleto,
       correo: correo,
       password: password,
       telefono: telefono,
+      aceptaPolitica: aceptaPolitica,
     );
   }
 
@@ -43,6 +45,7 @@ class AuthController extends ChangeNotifier {
     required String password,
     required String nombreRestaurante,
     required String codigoNegocio,
+    required bool aceptaPolitica,
   }) {
     return repositorio.registrarAdministrador(
       nombreCompleto: nombreCompleto,
@@ -50,7 +53,12 @@ class AuthController extends ChangeNotifier {
       password: password,
       nombreRestaurante: nombreRestaurante,
       codigoNegocio: codigoNegocio,
+      aceptaPolitica: aceptaPolitica,
     );
+  }
+
+  Future<AuthResultado<PoliticaPrivacidad>> obtenerPolitica() {
+    return repositorio.obtenerPolitica();
   }
 
   Future<AuthResultado<Usuario>> verificarCodigo({
@@ -104,7 +112,6 @@ class AuthScope extends InheritedNotifier<AuthController> {
   }
 
   /// Variante segura que devuelve null si no se encuentra el [AuthScope].
-  /// Útil para widgets que pueden renderizarse antes de tener acceso.
   static AuthController? maybeOf(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AuthScope>();
     return scope?.notifier;

@@ -1,9 +1,11 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_controller.dart';
 import '../services/auth_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/validadores.dart';
+import '../widgets/politica_sheet.dart';
 import 'verificacion_screen.dart';
 
 class RegistroAdminScreen extends StatefulWidget {
@@ -21,6 +23,7 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
   final _pwdCtrl = TextEditingController();
   final _confirmPwdCtrl = TextEditingController();
   final _codigoNegocioCtrl = TextEditingController();
+  late final TapGestureRecognizer _tapPolitica;
 
   bool _ocultarPwd = true;
   bool _ocultarConfirm = true;
@@ -29,7 +32,15 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
   String? _errorGeneral;
 
   @override
+  void initState() {
+    super.initState();
+    _tapPolitica = TapGestureRecognizer()
+      ..onTap = () => mostrarPoliticaPrivacidad(context);
+  }
+
+  @override
   void dispose() {
+    _tapPolitica.dispose();
     _nombreCtrl.dispose();
     _restauranteCtrl.dispose();
     _correoCtrl.dispose();
@@ -43,8 +54,8 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
     setState(() => _errorGeneral = null);
     if (!_formKey.currentState!.validate()) return;
     if (!_aceptaTerminos) {
-      setState(() =>
-          _errorGeneral = 'Debes aceptar los términos para continuar');
+      setState(() => _errorGeneral =
+          'Debes aceptar la política de tratamiento de datos personales para continuar');
       return;
     }
 
@@ -56,17 +67,17 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
       password: _pwdCtrl.text,
       nombreRestaurante: _restauranteCtrl.text,
       codigoNegocio: _codigoNegocioCtrl.text,
+      aceptaPolitica: _aceptaTerminos,
     );
     if (!mounted) return;
     setState(() => _cargando = false);
 
     switch (resultado) {
-      case AuthExito(:final datos):
+      case AuthExito():
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => VerificacionScreen(
               correo: _correoCtrl.text.trim().toLowerCase(),
-              codigoSimulado: datos,
             ),
           ),
         );
@@ -79,8 +90,7 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:
-            Text('Registrar restaurante', style: AppTheme.titulo(size: 20)),
+        title: Text('Registrar restaurante', style: AppTheme.titulo(size: 20)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
@@ -114,8 +124,7 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
                               const SizedBox(width: 8),
                               Text('PORTAL DE NEGOCIOS',
                                   style: AppTheme.etiqueta(
-                                      size: 11,
-                                      color: AppColors.cremaOscura)),
+                                      size: 11, color: AppColors.cremaOscura)),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -142,8 +151,7 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
                       const SizedBox(height: 16),
                     ],
 
-                    Text('DATOS DEL ADMINISTRADOR',
-                        style: AppTheme.etiqueta()),
+                    Text('DATOS DEL ADMINISTRADOR', style: AppTheme.etiqueta()),
                     const SizedBox(height: 12),
 
                     TextFormField(
@@ -194,7 +202,6 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
 
                     TextFormField(
                       controller: _codigoNegocioCtrl,
-                      textCapitalization: TextCapitalization.characters,
                       textInputAction: TextInputAction.next,
                       validator: (v) {
                         final t = v?.trim() ?? '';
@@ -205,11 +212,11 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
                       },
                       decoration: InputDecoration(
                         labelText: 'CÓDIGO DE NEGOCIO',
-                        hintText: 'WAITLESS2024',
+                        hintText: 'Código que te entregó WaitLess',
                         helperText:
-                            'Demo: usa el código WAITLESS2024 para registrarte',
+                            'Lo valida el servidor. Pídelo al equipo de WaitLess.',
                         helperStyle: GoogleFonts.inter(
-                            fontSize: 11, color: AppColors.oliva),
+                            fontSize: 11, color: AppColors.cafeMedio),
                         helperMaxLines: 2,
                       ),
                     ),
@@ -301,12 +308,29 @@ class _RegistroAdminScreenState extends State<RegistroAdminScreen> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Text(
-                                'Acepto los Términos del Portal de Negocios y autorizo el procesamiento de datos del establecimiento.',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: AppColors.cafeOscuro,
-                                    height: 1.4),
+                              child: RichText(
+                                text: TextSpan(
+                                  style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: AppColors.cafeOscuro,
+                                      height: 1.4),
+                                  children: [
+                                    const TextSpan(text: 'Acepto la '),
+                                    TextSpan(
+                                      text:
+                                          'Política de Tratamiento de Datos Personales',
+                                      recognizer: _tapPolitica,
+                                      style: const TextStyle(
+                                        color: AppColors.terracota,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                    const TextSpan(
+                                        text:
+                                            ' de WaitLess (Ley 1581 de 2012) y autorizo el procesamiento de los datos del establecimiento.'),
+                                  ],
+                                ),
                               ),
                             ),
                           ],

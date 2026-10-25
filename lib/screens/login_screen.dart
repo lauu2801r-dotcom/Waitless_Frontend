@@ -6,7 +6,7 @@ import '../theme/app_theme.dart';
 import '../utils/validadores.dart';
 import 'main_shell.dart';
 import 'admin/admin_shell.dart';
-import 'registro_screen.dart';
+import 'registro_tipo_screen.dart';
 import 'verificacion_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -164,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
       case AuthError(:final mensaje):
-        if (mensaje.contains('verificado')) {
+        if (mensaje.contains('verificada')) {
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => VerificacionScreen(correo: _correoCtrl.text),
@@ -326,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                  builder: (_) => const RegistroScreen()),
+                                  builder: (_) => const RegistroTipoScreen()),
                             );
                           },
                           child: Text(
