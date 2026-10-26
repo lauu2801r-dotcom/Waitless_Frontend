@@ -120,6 +120,12 @@ class PedidoApi {
   final DateTime creadoEn;
   final TipoEntregaApi tipoEntrega;
   final String? direccionDomicilio;
+  final int? restauranteId;
+  final String? restauranteNombre;
+  final int? mesaNumero;
+
+  /// Número de mesa que ve el cliente (no el id interno).
+  int get mesaVisible => mesaNumero ?? mesaId;
 
   const PedidoApi({
     required this.id,
@@ -133,6 +139,9 @@ class PedidoApi {
     required this.creadoEn,
     this.tipoEntrega = TipoEntregaApi.restaurante,
     this.direccionDomicilio,
+    this.restauranteId,
+    this.restauranteNombre,
+    this.mesaNumero,
   });
 
   factory PedidoApi.fromJson(Map<String, dynamic> json) => PedidoApi(
@@ -149,6 +158,9 @@ class PedidoApi {
         creadoEn: DateTime.parse(json['creado_en'] as String),
         tipoEntrega: TipoEntregaApiX.desdeCodigo(json['tipo_entrega'] as String?),
         direccionDomicilio: json['direccion_domicilio'] as String?,
+        restauranteId: json['restaurante_id'] as int?,
+        restauranteNombre: json['restaurante_nombre'] as String?,
+        mesaNumero: json['mesa_numero'] as int?,
       );
 
   String get totalFormateado {
@@ -195,7 +207,18 @@ class Carrito extends ChangeNotifier {
     return '\$${t.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
   }
 
-  void agregar(Producto producto, {int cantidad = 1}) {
+  /// Restaurante del carrito (null si está vacío). Cada pedido es de un solo restaurante.
+  int? get restauranteId =>
+      _items.isEmpty ? null : _items.first.producto.restauranteId;
+  String? get restauranteNombre =>
+      _items.isEmpty ? null : _items.first.producto.restauranteNombre;
+
+  bool aceptaProducto(Producto p) =>
+      _items.isEmpty || _items.first.producto.restauranteId == p.restauranteId;
+
+  /// Devuelve false (sin agregar) si el plato es de otro restaurante.
+  bool agregar(Producto producto, {int cantidad = 1}) {
+    if (!aceptaProducto(producto)) return false;
     final idx = _items.indexWhere((i) => i.producto.id == producto.id);
     if (idx >= 0) {
       _items[idx].cantidad += cantidad;
@@ -203,6 +226,7 @@ class Carrito extends ChangeNotifier {
       _items.add(ItemCarrito(producto: producto, cantidad: cantidad));
     }
     notifyListeners();
+    return true;
   }
 
   void quitar(int productoId) {

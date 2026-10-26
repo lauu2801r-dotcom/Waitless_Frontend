@@ -6,6 +6,7 @@ import '../services/auth_controller.dart';
 import '../services/auth_repository.dart';
 import '../theme/app_theme.dart';
 import 'admin/admin_shell.dart';
+import 'empleado/empleado_shell.dart';
 import 'main_shell.dart';
 
 class VerificacionScreen extends StatefulWidget {
@@ -84,9 +85,11 @@ class _VerificacionScreenState extends State<VerificacionScreen> {
 
     switch (resultado) {
       case AuthExito():
-        final destino = auth.esAdministrador
+        final Widget destino = auth.esAdministrador
             ? const AdminShell()
-            : const MainShell();
+            : auth.esEmpleado
+                ? const EmpleadoShell()
+                : const MainShell();
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => destino),
           (_) => false,

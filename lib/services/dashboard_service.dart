@@ -33,28 +33,60 @@ class TopPlatoApi {
   }
 }
 
+class ItemRecienteApi {
+  final String nombre;
+  final int cantidad;
+  final double subtotal;
+
+  const ItemRecienteApi({
+    required this.nombre,
+    required this.cantidad,
+    required this.subtotal,
+  });
+
+  factory ItemRecienteApi.fromJson(Map<String, dynamic> json) =>
+      ItemRecienteApi(
+        nombre: json['nombre'] as String,
+        cantidad: json['cantidad'] as int,
+        subtotal: (json['subtotal'] as num).toDouble(),
+      );
+}
+
 class PedidoRecienteApi {
   final int id;
   final int mesaId;
+  final int? mesaNumero;
   final double total;
   final String estado;
   final int haceMinutos;
+  final String? notas;
+  final List<ItemRecienteApi> items;
 
   const PedidoRecienteApi({
     required this.id,
     required this.mesaId,
+    this.mesaNumero,
     required this.total,
     required this.estado,
     required this.haceMinutos,
+    this.notas,
+    this.items = const [],
   });
+
+  int get mesaVisible => mesaNumero ?? mesaId;
 
   factory PedidoRecienteApi.fromJson(Map<String, dynamic> json) =>
       PedidoRecienteApi(
         id: json['id'] as int,
         mesaId: json['mesa_id'] as int,
+        mesaNumero: json['mesa_numero'] as int?,
         total: (json['total'] as num).toDouble(),
         estado: json['estado'] as String,
         haceMinutos: json['hace_minutos'] as int,
+        notas: json['notas'] as String?,
+        items: ((json['items'] as List<dynamic>?) ?? const [])
+            .map((j) => ItemRecienteApi.fromJson(j as Map<String, dynamic>))
+            .toList(),
       );
 
   String get tiempoFormateado {

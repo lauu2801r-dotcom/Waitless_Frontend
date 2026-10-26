@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../utils/validadores.dart';
 import 'main_shell.dart';
 import 'admin/admin_shell.dart';
+import 'empleado/empleado_shell.dart';
 import 'registro_tipo_screen.dart';
 import 'verificacion_screen.dart';
 
@@ -157,6 +158,10 @@ class _LoginScreenState extends State<LoginScreen> {
         if (datos.esAdministrador) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const AdminShell()),
+          );
+        } else if (datos.esEmpleado) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const EmpleadoShell()),
           );
         } else {
           Navigator.of(context).pushReplacement(

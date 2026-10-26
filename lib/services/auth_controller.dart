@@ -16,6 +16,7 @@ class AuthController extends ChangeNotifier {
   bool get cargando => _cargando;
   bool get esAdministrador => _usuario?.esAdministrador ?? false;
   bool get esCliente => _usuario?.esCliente ?? false;
+  bool get esEmpleado => _usuario?.esEmpleado ?? false;
 
   Future<void> _inicializar() async {
     _usuario = await repositorio.usuarioActual();

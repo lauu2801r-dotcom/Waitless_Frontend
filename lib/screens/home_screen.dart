@@ -5,6 +5,8 @@ import '../services/auth_controller.dart';
 import '../services/pedido_service.dart';
 import '../utils/app_strings.dart';
 import '../services/menu_service.dart';
+import '../services/restaurantes_service.dart';
+import 'menu_screen.dart';
 import 'reservas_screen.dart';
 import '../widgets/boton_favorito.dart';
 
@@ -17,30 +19,99 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _categoriaSeleccionada = 'Todos';
+  List<RestauranteApi> _restaurantes = [];
+  RestauranteApi? _restaurante;
   List<Producto> _productos = [];
+  bool _cargandoRest = true;
   bool _cargandoMenu = true;
-
-  final List<Map<String, dynamic>> _categorias = [
-    {'nombre': 'Todos', 'emoji': '🍽️'},
-    {'nombre': 'Entradas', 'emoji': '🥗'},
-    {'nombre': 'Principales', 'emoji': '🍝'},
-    {'nombre': 'Postres', 'emoji': '🍰'},
-    {'nombre': 'Bebidas', 'emoji': '🍹'},
-  ];
 
   @override
   void initState() {
     super.initState();
-    _cargarMenu();
+    _cargarTodo();
+  }
+
+  RestauranteApi? _buscar(List<RestauranteApi> lista, int? id) {
+    if (id == null) return null;
+    for (final r in lista) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  Future<void> _cargarTodo() async {
+    setState(() {
+      _cargandoRest = true;
+      _cargandoMenu = true;
+    });
+    final lista = await RestaurantesService.listar();
+    if (!mounted) return;
+    final activos = lista.where((r) => r.activo).toList();
+    final elegido = _buscar(activos, _restaurante?.id) ??
+        _buscar(activos, Carrito().restauranteId) ??
+        (activos.isNotEmpty ? activos.first : null);
+    setState(() {
+      _restaurantes = activos;
+      _restaurante = elegido;
+      _cargandoRest = false;
+    });
+    await _cargarMenu();
   }
 
   Future<void> _cargarMenu() async {
+    final r = _restaurante;
+    if (r == null) {
+      setState(() {
+        _productos = [];
+        _cargandoMenu = false;
+      });
+      return;
+    }
     setState(() => _cargandoMenu = true);
-    final productos = await MenuService.obtenerMenu();
+    final productos = await MenuService.obtenerMenu(restauranteId: r.id);
+    if (!mounted || _restaurante?.id != r.id) return;
     setState(() {
       _productos = productos;
       _cargandoMenu = false;
     });
+  }
+
+  void _elegirRestaurante(RestauranteApi r) {
+    if (_restaurante?.id == r.id) return;
+    setState(() {
+      _restaurante = r;
+      _categoriaSeleccionada = 'Todos';
+      _productos = [];
+    });
+    _cargarMenu();
+  }
+
+  /// Chips de categoría según lo que realmente tiene el restaurante elegido.
+  List<Map<String, dynamic>> get _chipsCategorias {
+    final vistas = <String>[];
+    for (final p in _productos) {
+      final c = p.categoria;
+      if (c != null && !vistas.contains(c)) vistas.add(c);
+    }
+    return [
+      {'nombre': 'Todos', 'emoji': '🍽️'},
+      for (final c in vistas) {'nombre': c, 'emoji': Producto.emojiCategoria(c)},
+    ];
+  }
+
+  List<Producto> get _productosVisibles => _categoriaSeleccionada == 'Todos'
+      ? _productos
+      : _productos
+          .where((p) => p.categoria == _categoriaSeleccionada)
+          .toList();
+
+  void _abrirMenu() {
+    final r = _restaurante;
+    if (r == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => MenuScreen(restaurante: r)),
+    );
   }
 
   void _abrirHoja({
@@ -128,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _abrirBuscador() {
     final ctrl = TextEditingController();
     _abrirHoja(
-      titulo: 'Buscar',
+      titulo: _restaurante == null ? 'Buscar' : 'Buscar en ${_restaurante!.nombre}',
       altura: 0.85,
       contenido: StatefulBuilder(
         builder: (ctx, setS) {
@@ -148,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 autofocus: true,
                 onChanged: (_) => setS(() {}),
                 decoration: const InputDecoration(
-                  hintText: 'Pasta, postre, italiana...',
+                  hintText: 'Busca un plato o categoría...',
                   prefixIcon: Icon(Icons.search,
                       color: AppColors.cafeMedio, size: 20),
                 ),
@@ -261,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              _toast('Explora el menú y agrega al carrito');
+              _abrirMenu();
             },
             icon: const Icon(Icons.menu_book_outlined, size: 18),
             label: const Text('VER MENÚ COMPLETO'),
@@ -307,25 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _abrirMenuCompleto() {
-    _abrirHoja(
-      titulo: 'Menú completo',
-      altura: 0.85,
-      contenido: _cargandoMenu
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: _productos
-                  .map((p) => _ItemMenu(
-                        emoji: p.emoji,
-                        nombre: p.nombre,
-                        precio: p.precioFormateado,
-                        categoria: p.categoria ?? '',
-                        onTap: () => _abrirDetallePlato(p),
-                      ))
-                  .toList(),
-            ),
-    );
-  }
+  void _abrirMenuCompleto() => _abrirMenu();
 
   void _abrirDetallePlato(Producto producto) {
     _abrirHoja(
@@ -345,9 +398,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(fontSize: 80))),
           ),
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: BotonFavorito(productoId: producto.id),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  producto.restauranteNombre == null
+                      ? ''
+                      : '${_restaurante?.emoji ?? '🍴'} ${producto.restauranteNombre}',
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cafeMedio),
+                ),
+              ),
+              BotonFavorito(productoId: producto.id),
+            ],
           ),
           Align(
             alignment: Alignment.centerLeft,
@@ -390,16 +455,106 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              Carrito().agregar(producto);
-              _toast('${producto.nombre} agregado al carrito 🛒');
+              final ok = await agregarAlCarrito(context, producto);
+              if (ok && mounted) {
+                _toast('${producto.nombre} agregado al carrito 🛒');
+              }
             },
             icon: const Icon(Icons.add_shopping_cart, size: 18),
             label: const Text('AGREGAR AL CARRITO'),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _seccionRestaurantes() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            '¿Dónde quieres pedir?',
+            style: GoogleFonts.playfairDisplay(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: AppColors.cafeOscuro,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_cargandoRest)
+          const SizedBox(
+            height: 120,
+            child: Center(
+                child: CircularProgressIndicator(color: AppColors.terracota)),
+          )
+        else if (_restaurantes.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.alertaFondo,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      color: AppColors.alertaTexto, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('No pudimos cargar los restaurantes.',
+                        style: GoogleFonts.inter(
+                            fontSize: 13, color: AppColors.alertaTexto)),
+                  ),
+                  TextButton(
+                    onPressed: _cargarTodo,
+                    child: Text('Reintentar',
+                        style: GoogleFonts.inter(
+                            color: AppColors.terracota,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 128,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: _restaurantes.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (_, i) {
+                final r = _restaurantes[i];
+                return _TarjetaRestaurante(
+                  restaurante: r,
+                  seleccionado: r.id == _restaurante?.id,
+                  onTap: () => _elegirRestaurante(r),
+                );
+              },
+            ),
+          ),
+        if (_restaurante != null) ...[
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _abrirMenu,
+                icon: const Icon(Icons.menu_book_outlined, size: 18),
+                label: Text('MENÚ DE ${_restaurante!.nombre.toUpperCase()}'),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -527,7 +682,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
+
+              // ── Restaurantes ──
+              _seccionRestaurantes(),
+              const SizedBox(height: 24),
 
               // ── Banner de promo ──
               Padding(
@@ -651,10 +810,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: _categorias.length,
+                  itemCount: _chipsCategorias.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
                   itemBuilder: (_, index) {
-                    final cat = _categorias[index];
+                    final cat = _chipsCategorias[index];
                     final selected =
                         _categoriaSeleccionada == cat['nombre'];
                     return GestureDetector(
@@ -738,15 +897,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: 220,
                 child: _cargandoMenu
                     ? const Center(child: CircularProgressIndicator())
-                    : ListView.separated(
+                    : _productosVisibles.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Este restaurante aún no tiene platos disponibles',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, color: AppColors.cafeMedio),
+                            ),
+                          )
+                        : ListView.separated(
                         scrollDirection: Axis.horizontal,
                         padding:
                             const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: _productos.take(4).length,
+                        itemCount: _productosVisibles.take(6).length,
                         separatorBuilder: (_, __) =>
                             const SizedBox(width: 12),
                         itemBuilder: (_, index) {
-                          final p = _productos[index];
+                          final p = _productosVisibles[index];
                           return _TarjetaPlatoDestacado(
                             emoji: p.emoji,
                             nombre: p.nombre,
@@ -787,9 +954,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           precio: p.precioFormateado,
                           tiempo: '15 min',
                           onTap: () => _abrirDetallePlato(p),
-                          onAdd: () {
-                            Carrito().agregar(p);
-                            _toast('${p.nombre} agregado al carrito 🛒');
+                          onAdd: () async {
+                            final ok = await agregarAlCarrito(context, p);
+                            if (ok && mounted) {
+                              _toast('${p.nombre} agregado al carrito 🛒');
+                            }
                           },
                         ),
                       )
@@ -809,6 +978,118 @@ class _HomeScreenState extends State<HomeScreen> {
 // ─────────────────────────────────────────────────────────────
 //  WIDGETS PRIVADOS (idénticos al original)
 // ─────────────────────────────────────────────────────────────
+
+class _TarjetaRestaurante extends StatelessWidget {
+  final RestauranteApi restaurante;
+  final bool seleccionado;
+  final VoidCallback onTap;
+
+  const _TarjetaRestaurante({
+    required this.restaurante,
+    required this.seleccionado,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final r = restaurante;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 240,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: seleccionado
+              ? AppColors.terracota.withValues(alpha: 0.10)
+              : AppColors.superficie,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: seleccionado ? AppColors.terracota : AppColors.borde,
+            width: seleccionado ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.terracota.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                      child:
+                          Text(r.emoji, style: const TextStyle(fontSize: 24))),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(r.nombre,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.cafeOscuro)),
+                      const SizedBox(height: 2),
+                      Text(r.tipoCocina ?? 'Restaurante',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                              fontSize: 11.5, color: AppColors.cafeMedio)),
+                    ],
+                  ),
+                ),
+                if (seleccionado)
+                  const Icon(Icons.check_circle,
+                      color: AppColors.terracota, size: 20),
+              ],
+            ),
+            Row(
+              children: [
+                const Icon(Icons.restaurant_menu,
+                    size: 13, color: AppColors.cafeMedio),
+                const SizedBox(width: 4),
+                Text('${r.totalPlatos} platos',
+                    style: GoogleFonts.inter(
+                        fontSize: 11.5, color: AppColors.cafeMedio)),
+                const SizedBox(width: 12),
+                Icon(Icons.event_seat_outlined,
+                    size: 13,
+                    color: r.mesasLibres > 0
+                        ? AppColors.oliva
+                        : AppColors.terracota),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                      r.mesasLibres > 0
+                          ? '${r.mesasLibres} mesas libres'
+                          : 'Sin mesas libres',
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: r.mesasLibres > 0
+                              ? AppColors.oliva
+                              : AppColors.terracota)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _AccionRapida extends StatelessWidget {
   final IconData icono;

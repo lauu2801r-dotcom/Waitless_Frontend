@@ -7,8 +7,9 @@ import 'services/app_settings.dart';
 import 'services/api_auth_repository.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
-import 'screens/main_shell.dart';
+impRort 'screens/main_shell.dart';
 import 'screens/admin/admin_shell.dart';
+import 'screens/empleado/empleado_shell.dart';
 import 'screens/splash_screen.dart';
 
 void main() {
@@ -126,6 +127,10 @@ class _ArranqueInicial extends StatelessWidget {
     if (auth.esAdministrador) {
       debugPrint('✅ ES ADMIN → Mostrando AdminShell');
       return const AdminShell();
+    }
+
+    if (auth.esEmpleado) {
+      return const EmpleadoShell();
     }
 
     debugPrint('👤 ES CLIENTE → Mostrando MainShell');

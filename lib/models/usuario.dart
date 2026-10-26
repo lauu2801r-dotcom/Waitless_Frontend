@@ -1,13 +1,15 @@
 import 'dart:convert';
 
 /// Roles disponibles en el sistema.
-enum RolUsuario { cliente, administrador }
+enum RolUsuario { cliente, empleado, administrador }
 
 extension RolUsuarioX on RolUsuario {
   String get etiqueta {
     switch (this) {
       case RolUsuario.cliente:
         return 'Cliente';
+      case RolUsuario.empleado:
+        return 'Empleado';
       case RolUsuario.administrador:
         return 'Administrador';
     }
@@ -17,6 +19,8 @@ extension RolUsuarioX on RolUsuario {
     switch (this) {
       case RolUsuario.cliente:
         return 'cliente';
+      case RolUsuario.empleado:
+        return 'empleado';
       case RolUsuario.administrador:
         return 'administrador';
     }
@@ -26,6 +30,8 @@ extension RolUsuarioX on RolUsuario {
     switch (codigo) {
       case 'administrador':
         return RolUsuario.administrador;
+      case 'empleado':
+        return RolUsuario.empleado;
       default:
         return RolUsuario.cliente;
     }
@@ -68,6 +74,7 @@ class Usuario {
 
   bool get esAdministrador => rol == RolUsuario.administrador;
   bool get esCliente => rol == RolUsuario.cliente;
+  bool get esEmpleado => rol == RolUsuario.empleado;
 
   Usuario copyWith({
     String? nombreCompleto,

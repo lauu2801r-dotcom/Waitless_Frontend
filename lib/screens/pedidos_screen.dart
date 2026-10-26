@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/pedido_service.dart';
 import '../services/tiempo_real_service.dart';
 import '../services/menu_service.dart';
+import '../services/inventario_service.dart' show InvExito;
+import '../services/pagos_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_strings.dart';
 import 'detalle_pedido_screen.dart';
@@ -19,6 +21,8 @@ class PedidosScreen extends StatefulWidget {
 
 class _PedidosScreenState extends State<PedidosScreen> {
   List<PedidoApi> _pedidos = [];
+  Set<int> _pagados = {};
+  bool _pagosCargados = false;
   bool _cargando = true;
   String? _error;
 
@@ -33,7 +37,9 @@ class _PedidosScreenState extends State<PedidosScreen> {
     _tiempoReal = TiempoRealConexion('mis-eventos')..conectar();
     _suscripcion = _tiempoReal.eventos.listen((evento) {
       final tipo = evento['tipo'] as String? ?? '';
-      if (tipo.startsWith('pedido_')) {
+      if (tipo.startsWith('pedido_') ||
+          tipo.startsWith('pago_') ||
+          tipo.startsWith('factura_')) {
         _cargarPedidos(silencioso: true);
         final mensaje = evento['mensaje'] as String?;
         if (mensaje != null && mounted) {
@@ -58,9 +64,17 @@ class _PedidosScreenState extends State<PedidosScreen> {
       });
     }
     final resultado = await PedidoService.misPedidos();
+    final facturas = await PagosService.misFacturas();
     if (!mounted) return;
     setState(() {
       _cargando = false;
+      if (facturas is InvExito<List<FacturaApi>>) {
+        _pagados = facturas.datos
+            .where((f) => f.estado == 'pagada')
+            .map((f) => f.pedidoId)
+            .toSet();
+        _pagosCargados = true;
+      }
       if (resultado is PedidoExito<List<PedidoApi>>) {
         _pedidos = resultado.datos;
       } else if (resultado is PedidoError<List<PedidoApi>>) {
@@ -132,9 +146,18 @@ class _PedidosScreenState extends State<PedidosScreen> {
             p.estado != EstadoPedidoApi.entregado &&
             p.estado != EstadoPedidoApi.cancelado)
         .toList();
+    // Entregados que todavía no se han pagado (solo si pudimos consultar los pagos).
+    final porPagar = !_pagosCargados
+        ? <PedidoApi>[]
+        : _pedidos
+            .where((p) =>
+                p.estado == EstadoPedidoApi.entregado &&
+                !_pagados.contains(p.id))
+            .toList();
     final historicos = _pedidos
         .where((p) =>
-            p.estado == EstadoPedidoApi.entregado ||
+            (p.estado == EstadoPedidoApi.entregado &&
+                !porPagar.contains(p)) ||
             p.estado == EstadoPedidoApi.cancelado)
         .toList();
     final totalGastado = _pedidos
@@ -171,7 +194,7 @@ class _PedidosScreenState extends State<PedidosScreen> {
                       children: [
                         // ── Botón nuevo pedido ──
                         GestureDetector(
-                          onTap: () => _abrirModalPedido(),
+                          onTap: widget.onIrAInicio ?? () => _abrirModalPedido(),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 8),
@@ -290,6 +313,33 @@ class _PedidosScreenState extends State<PedidosScreen> {
                     const SizedBox(height: 24),
                   ],
 
+                  // ── Por pagar ──
+                  if (porPagar.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.payment,
+                            size: 14, color: AppColors.terracota),
+                        const SizedBox(width: 6),
+                        Text('POR PAGAR', style: AppTheme.etiqueta()),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...porPagar.map((p) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _TarjetaPedido(
+                            pedido: p,
+                            pagado: false,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      DetallePedidoScreen(pedido: p)),
+                            ).then((_) => _cargarPedidos(silencioso: true)),
+                          ),
+                        )),
+                    const SizedBox(height: 14),
+                  ],
+
                   // ── Historial ──
                   if (historicos.isNotEmpty) ...[
                     Row(
@@ -308,6 +358,10 @@ class _PedidosScreenState extends State<PedidosScreen> {
                             opacity: 0.7,
                             child: _TarjetaPedido(
                               pedido: p,
+                              pagado: _pagosCargados &&
+                                      p.estado == EstadoPedidoApi.entregado
+                                  ? _pagados.contains(p.id)
+                                  : null,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -359,7 +413,7 @@ class _ModalPedidoState extends State<_ModalPedido> {
   void initState() {
     super.initState();
     if (_esEdicion) {
-      _mesaCtrl.text = widget.pedidoExistente!.mesaId.toString();
+      _mesaCtrl.text = widget.pedidoExistente!.mesaId.toString(); // el servidor espera el id
       _notasCtrl.text = widget.pedidoExistente!.notas ?? '';
       for (final item in widget.pedidoExistente!.items) {
         _cantidades[item.productoId] = item.cantidad;
@@ -376,7 +430,8 @@ class _ModalPedidoState extends State<_ModalPedido> {
   }
 
   Future<void> _cargarMenu() async {
-    final productos = await MenuService.obtenerMenu();
+    final productos = await MenuService.obtenerMenu(
+        restauranteId: widget.pedidoExistente?.restauranteId);
     if (!mounted) return;
     setState(() {
       _menu = productos;
@@ -777,9 +832,11 @@ class _TarjetaPedido extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onCancelar;
   final VoidCallback? onEditar;
+  final bool? pagado; // null = no aplica / se desconoce
 
   const _TarjetaPedido({
     required this.pedido,
+    this.pagado,
     this.onTap,
     this.onCancelar,
     this.onEditar,
@@ -835,13 +892,36 @@ class _TarjetaPedido extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Mesa ${pedido.mesaId} · $cantItems ${cantItems == 1 ? 'producto' : 'productos'}',
+                        '${pedido.restauranteNombre == null ? '' : '${pedido.restauranteNombre} · '}Mesa ${pedido.mesaVisible} · $cantItems ${cantItems == 1 ? 'producto' : 'productos'}',
                         style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: AppColors.cafeOscuro),
                       ),
                       const SizedBox(height: 3),
+                      if (pagado != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (pagado!
+                                    ? AppColors.exitoTexto
+                                    : AppColors.terracota)
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            pagado! ? 'Pagado' : 'Por pagar · toca para pagar',
+                            style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: pagado!
+                                    ? AppColors.exitoTexto
+                                    : AppColors.terracota),
+                          ),
+                        ),
+                      ],
                       Row(
                         children: [
                           Container(

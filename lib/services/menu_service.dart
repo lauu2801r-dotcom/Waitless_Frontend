@@ -12,6 +12,8 @@ class Producto {
   final String? categoria;
   final String? imagenUrl;
   final bool disponible;
+  final int? restauranteId;
+  final String? restauranteNombre;
 
   const Producto({
     required this.id,
@@ -21,6 +23,8 @@ class Producto {
     this.categoria,
     this.imagenUrl,
     required this.disponible,
+    this.restauranteId,
+    this.restauranteNombre,
   });
 
   factory Producto.fromJson(Map<String, dynamic> json) => Producto(
@@ -31,6 +35,8 @@ class Producto {
         categoria: json['categoria'] as String?,
         imagenUrl: json['imagen_url'] as String?,
         disponible: json['disponible'] as bool? ?? true,
+        restauranteId: json['restaurante_id'] as int?,
+        restauranteNombre: json['restaurante_nombre'] as String?,
       );
 
   String get precioFormateado {
@@ -38,8 +44,9 @@ class Producto {
     return '\$${p.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
   }
 
-  String get emoji {
-    switch (categoria?.toLowerCase()) {
+  /// Emoji según el tipo de comida (sirve para cualquier restaurante).
+  static String emojiCategoria(String? categoria) {
+    switch (categoria?.trim().toLowerCase()) {
       case 'entradas':
         return '🥗';
       case 'principales':
@@ -47,11 +54,21 @@ class Producto {
       case 'postres':
         return '🍰';
       case 'bebidas':
-        return '🍹';
+        return '🥤';
+      case 'hamburguesas':
+        return '🍔';
+      case 'perros calientes':
+        return '🌭';
+      case 'combos':
+        return '🥡';
+      case 'acompañantes':
+        return '🍟';
       default:
         return '🍴';
     }
   }
+
+  String get emoji => emojiCategoria(categoria);
 }
 
 class MenuService {
@@ -62,43 +79,37 @@ class MenuService {
     return prefs.getString('waitless.token');
   }
 
-  static Future<List<Producto>> obtenerMenu() async {
+  /// Menú disponible. Si se pasa [restauranteId] solo trae los platos de ese restaurante.
+  static Future<List<Producto>> obtenerMenu({int? restauranteId}) async {
     try {
       final token = await _obtenerToken();
-      debugPrint('🍽️ Token: $token');
+      final url = restauranteId == null
+          ? '$_baseUrl/menu/'
+          : '$_baseUrl/menu/?restaurante_id=$restauranteId';
 
       final response = await http.get(
-        Uri.parse('$_baseUrl/menu/'),
+        Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
         },
       );
 
-      debugPrint('🍽️ Status: ${response.statusCode}');
-      debugPrint('🍽️ Body: ${response.body}');
-
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        debugPrint('🍽️ Total en JSON: ${data.length}');
-
         final productos = <Producto>[];
         for (final j in data) {
           try {
-            final p = Producto.fromJson(j as Map<String, dynamic>);
-            productos.add(p);
-            debugPrint('✅ Parseado: ${p.nombre} disponible=${p.disponible}');
+            productos.add(Producto.fromJson(j as Map<String, dynamic>));
           } catch (e) {
-            debugPrint('❌ Error parseando: $j → $e');
+            debugPrint('MenuService: error parseando $j → $e');
           }
         }
-
-        debugPrint('🍽️ Disponibles: ${productos.where((p) => p.disponible).length}');
         return productos.where((p) => p.disponible).toList();
       }
       return [];
     } catch (e) {
-      debugPrint('🔴 MenuService ERROR: $e');
+      debugPrint('MenuService ERROR: $e');
       return [];
     }
   }
@@ -123,7 +134,7 @@ class MenuService {
       }
       return [];
     } catch (e) {
-      debugPrint('🔴 MenuService.obtenerPorCategoria ERROR: $e');
+      debugPrint('MenuService.obtenerPorCategoria ERROR: $e');
       return [];
     }
   }

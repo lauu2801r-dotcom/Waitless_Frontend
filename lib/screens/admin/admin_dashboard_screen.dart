@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../services/auth_controller.dart';
 import '../../services/dashboard_service.dart';
 import '../../utils/app_strings.dart';
+import '../../utils/formato.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -153,6 +154,141 @@ class _CuerpoDashboard extends StatelessWidget {
     return '🍽️';
   }
 
+  void _hoja(BuildContext context, List<Widget> hijos) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.cremaOscura,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...hijos,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _filaDato(String etiqueta, String valor, {bool destacado = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(etiqueta,
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: AppColors.cafeMedio)),
+          Text(valor,
+              style: destacado
+                  ? GoogleFonts.playfairDisplay(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.terracota)
+                  : GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cafeOscuro)),
+        ],
+      ),
+    );
+  }
+
+  void _detallePedido(BuildContext context, PedidoRecienteApi p) {
+    final color = _colorEstado(p.estado);
+    _hoja(context, [
+      Row(
+        children: [
+          Expanded(
+              child: Text('Pedido #${p.id}', style: AppTheme.titulo(size: 22))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(_emojiEstado(p.estado),
+                style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color)),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text('Mesa ${p.mesaVisible} · ${p.tiempoFormateado}',
+          style: GoogleFonts.inter(fontSize: 12, color: AppColors.cafeMedio)),
+      const SizedBox(height: 16),
+      Text('DETALLE DEL PEDIDO', style: AppTheme.etiqueta()),
+      const SizedBox(height: 10),
+      if (p.items.isEmpty)
+        Text('Sin detalle disponible',
+            style:
+                GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio))
+      else
+        ...p.items.map((i) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('${i.cantidad}x ${i.nombre}',
+                        style: GoogleFonts.inter(
+                            fontSize: 13, color: AppColors.cafeOscuro)),
+                  ),
+                  Text(moneda(i.subtotal),
+                      style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.cafeOscuro)),
+                ],
+              ),
+            )),
+      if ((p.notas ?? '').isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text('NOTAS', style: AppTheme.etiqueta()),
+        const SizedBox(height: 4),
+        Text(p.notas!,
+            style: GoogleFonts.inter(
+                fontSize: 13, color: AppColors.cafeOscuro)),
+      ],
+      const Divider(height: 28),
+      _filaDato('Total', moneda(p.total), destacado: true),
+    ]);
+  }
+
+  void _detallePlato(BuildContext context, TopPlatoApi t) {
+    final promedio = t.vendidos == 0 ? 0.0 : t.ingresos / t.vendidos;
+    _hoja(context, [
+      Center(
+          child: Text(_emojiPlato(t.nombre),
+              style: const TextStyle(fontSize: 56))),
+      const SizedBox(height: 8),
+      Center(child: Text(t.nombre, style: AppTheme.titulo(size: 22))),
+      const SizedBox(height: 16),
+      _filaDato('Vendidos hoy', '${t.vendidos}'),
+      _filaDato('Precio promedio', moneda(promedio)),
+      const Divider(height: 24),
+      _filaDato('Ingresos del día', moneda(t.ingresos), destacado: true),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = datos;
@@ -231,13 +367,16 @@ class _CuerpoDashboard extends StatelessWidget {
         if (d.pedidosRecientes.isEmpty)
           const _SinDatos(mensaje: 'No hay pedidos recientes hoy')
         else
-          ...d.pedidosRecientes.map((p) => _TarjetaPedidoReciente(
-                id: p.id,
-                mesaId: p.mesaId,
-                total: p.total,
-                estado: _emojiEstado(p.estado),
-                tiempo: p.tiempoFormateado,
-                colorEstado: _colorEstado(p.estado),
+          ...d.pedidosRecientes.map((p) => GestureDetector(
+                onTap: () => _detallePedido(context, p),
+                child: _TarjetaPedidoReciente(
+                  id: p.id,
+                  mesaId: p.mesaVisible,
+                  total: p.total,
+                  estado: _emojiEstado(p.estado),
+                  tiempo: p.tiempoFormateado,
+                  colorEstado: _colorEstado(p.estado),
+                ),
               )),
 
         const SizedBox(height: 28),
@@ -253,12 +392,15 @@ class _CuerpoDashboard extends StatelessWidget {
         if (d.topPlatos.isEmpty)
           const _SinDatos(mensaje: 'Sin ventas registradas hoy')
         else
-          ...d.topPlatos.asMap().entries.map((e) => _TarjetaTopPlato(
-                posicion: e.key + 1,
-                emoji: _emojiPlato(e.value.nombre),
-                nombre: e.value.nombre,
-                vendidos: e.value.vendidos,
-                ingresos: e.value.ingresosFormateado,
+          ...d.topPlatos.asMap().entries.map((e) => GestureDetector(
+                onTap: () => _detallePlato(context, e.value),
+                child: _TarjetaTopPlato(
+                  posicion: e.key + 1,
+                  emoji: _emojiPlato(e.value.nombre),
+                  nombre: e.value.nombre,
+                  vendidos: e.value.vendidos,
+                  ingresos: e.value.ingresosFormateado,
+                ),
               )),
 
         const SizedBox(height: 20),

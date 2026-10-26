@@ -8,6 +8,7 @@ import '../../utils/app_strings.dart';
 import '../login_screen.dart';
 import 'admin_inventario_screen.dart';
 import 'admin_facturacion_screen.dart';
+import 'admin_personal_screen.dart';
 
 class AdminPerfilScreen extends StatefulWidget {
   const AdminPerfilScreen({super.key});
@@ -654,11 +655,12 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
               const SizedBox(height: 12),
               _GrupoOpciones(opciones: [
                 _OpcionMenu(Icons.people_outline, 'Personal del restaurante',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Personal',
-                        descripcion:
-                            'Administra meseros, cocineros y cajeros. Asigna roles y permisos.',
-                        icono: Icons.people_outline)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AdminPersonalScreen(),
+                          ),
+                        )),
                 _OpcionMenu(Icons.inventory_2_outlined, 'Inventario',
                     onTap: () => Navigator.push(
                           context,

@@ -56,6 +56,26 @@ class MesaService {
     throw Exception('Error al cargar mesas');
   }
 
+  /// Cambia el estado de una mesa (libre, ocupada, reservada, en_limpieza).
+  /// Devuelve null si salió bien, o el mensaje de error.
+  Future<String?> cambiarEstado(int mesaId, String estado) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/mesas/$mesaId/estado?estado=$estado'),
+        headers: await _headers(),
+      );
+      if (response.statusCode == 200) return null;
+      try {
+        final d = jsonDecode(utf8.decode(response.bodyBytes))['detail'];
+        if (d is String) return d;
+      } catch (_) {}
+      if (response.statusCode == 403) return 'No tienes permiso para cambiar esta mesa';
+      return 'No se pudo cambiar el estado';
+    } catch (_) {
+      return 'No se pudo conectar con el servidor';
+    }
+  }
+
   /// Solo mesas disponibles — usa GET /mesas/disponibles
   Future<List<MesaModel>> mesasDisponibles() async {
     final response = await http.get(

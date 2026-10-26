@@ -389,7 +389,7 @@ class _TarjetaPedidoAdminState extends State<_TarjetaPedidoAdmin> {
                             const Icon(Icons.table_restaurant_outlined,
                                 size: 12, color: AppColors.cafeMedio),
                             const SizedBox(width: 4),
-                            Text('Mesa ${pedido.mesaId}',
+                            Text('Mesa ${pedido.mesaVisible}',
                                 style: GoogleFonts.inter(
                                     fontSize: 11, color: AppColors.cafeMedio)),
                           ],

@@ -179,7 +179,7 @@ class DetallePedidoScreen extends StatelessWidget {
 
                   // Mesa e items
                   Text(
-                    'Mesa ${pedido.mesaId}',
+                    'Mesa ${pedido.mesaVisible}',
                     style: AppTheme.titulo(size: 26),
                   ),
                   const SizedBox(height: 4),
@@ -247,7 +247,7 @@ class DetallePedidoScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '${item.cantidad}x Producto #${item.productoId}',
+                              '${item.cantidad}x ${item.nombreProducto ?? 'Producto #${item.productoId}'}',
                               style: GoogleFonts.inter(
                                   fontSize: 13, color: AppColors.cafeOscuro),
                             ),

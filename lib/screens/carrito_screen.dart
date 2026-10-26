@@ -54,7 +54,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
 
   Future<void> _cargarMesas() async {
     setState(() => _cargandoMesas = true);
-    final mesas = await MesaService.obtenerMesasDisponibles();
+    final mesas = await MesaService.obtenerMesasDisponibles(
+        restauranteId: _carrito.restauranteId);
     setState(() {
       _mesas = mesas;
       _mesaSeleccionada = mesas.isNotEmpty ? mesas.first : null;
@@ -153,6 +154,33 @@ class _CarritoScreenState extends State<CarritoScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // ── Lista de items ──
+                            if (_carrito.restauranteNombre != null) ...[
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.terracota
+                                      .withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.storefront_outlined,
+                                        color: AppColors.terracota, size: 20),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Pidiendo en ${_carrito.restauranteNombre}',
+                                        style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.cafeOscuro),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                             Text('TU PEDIDO', style: AppTheme.etiqueta()),
                             const SizedBox(height: 12),
                             ..._carrito.items.map((item) =>
@@ -166,7 +194,18 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                       _carrito.quitar(item.producto.id),
                                 )),
 
-                            const SizedBox(height: 24),
+                            TextButton.icon(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.add,
+                                  size: 18, color: AppColors.terracota),
+                              label: Text('Agregar más platos',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.terracota)),
+                            ),
+
+                            const SizedBox(height: 16),
 
                             // ── Tipo de entrega ──
                             Text('TIPO DE ENTREGA', style: AppTheme.etiqueta()),
@@ -747,13 +786,16 @@ class _MesaOpc {
 class MesaService {
   static String get _base => ApiConfig.baseUrl;
 
-  static Future<List<_MesaOpc>> obtenerMesasDisponibles() async {
+  static Future<List<_MesaOpc>> obtenerMesasDisponibles(
+      {int? restauranteId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('waitless.token');
       final response = await http
           .get(
-            Uri.parse('$_base/mesas/disponibles'),
+            Uri.parse(restauranteId == null
+                ? '$_base/mesas/disponibles'
+                : '$_base/mesas/disponibles?restaurante_id=$restauranteId'),
             headers: {
               'Content-Type': 'application/json',
               if (token != null) 'Authorization': 'Bearer $token',
