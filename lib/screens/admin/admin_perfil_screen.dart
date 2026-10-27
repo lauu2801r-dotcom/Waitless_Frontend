@@ -9,6 +9,9 @@ import '../login_screen.dart';
 import 'admin_inventario_screen.dart';
 import 'admin_facturacion_screen.dart';
 import 'admin_personal_screen.dart';
+import 'admin_calificaciones_sheet.dart';
+import '../../services/calificaciones_service.dart';
+import '../../services/inventario_service.dart' show InvExito;
 
 class AdminPerfilScreen extends StatefulWidget {
   const AdminPerfilScreen({super.key});
@@ -23,11 +26,23 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
   List<Producto> _platos = [];
   List<MesaModel> _mesas = [];
   bool _cargando = true;
+  String _calif = '...'; // promedio real de calificaciones
 
   @override
   void initState() {
     super.initState();
     _cargarDatos();
+    _cargarCalificacion();
+  }
+
+  Future<void> _cargarCalificacion() async {
+    final r = await CalificacionesService.resumen();
+    if (!mounted) return;
+    setState(() {
+      _calif = (r is InvExito<ResumenCalificaciones> && r.datos.total > 0)
+          ? r.datos.promedio.toStringAsFixed(1)
+          : '—';
+    });
   }
 
   Future<void> _cargarDatos() async {
@@ -512,11 +527,14 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        const Expanded(
-                          child: _MetricaResumen(
-                              valor: '4.8',
-                              label: 'CALIF.',
-                              icon: Icons.star),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => mostrarCalificacionesAdmin(context),
+                            child: _MetricaResumen(
+                                valor: _calif,
+                                label: 'CALIF.',
+                                icon: Icons.star),
+                          ),
                         ),
                         Container(
                             width: 1,
@@ -524,10 +542,13 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
                             color:
                                 AppColors.cremaOscura.withValues(alpha: 0.3)),
                         Expanded(
-                          child: _MetricaResumen(
-                              valor: _cargando ? '...' : '$_totalPlatos',
-                              label: 'PLATOS',
-                              icon: Icons.menu_book_outlined),
+                          child: InkWell(
+                            onTap: () => _abrirMenu(context),
+                            child: _MetricaResumen(
+                                valor: _cargando ? '...' : '$_totalPlatos',
+                                label: 'PLATOS',
+                                icon: Icons.menu_book_outlined),
+                          ),
                         ),
                         Container(
                             width: 1,
@@ -535,10 +556,13 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
                             color:
                                 AppColors.cremaOscura.withValues(alpha: 0.3)),
                         Expanded(
-                          child: _MetricaResumen(
-                              valor: labelMesas,
-                              label: 'MESAS',
-                              icon: Icons.table_restaurant_outlined),
+                          child: InkWell(
+                            onTap: () => _abrirMesas(context),
+                            child: _MetricaResumen(
+                                valor: labelMesas,
+                                label: 'MESAS',
+                                icon: Icons.table_restaurant_outlined),
+                          ),
                         ),
                       ],
                     ),

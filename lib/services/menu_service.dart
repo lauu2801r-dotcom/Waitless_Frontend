@@ -14,6 +14,8 @@ class Producto {
   final bool disponible;
   final int? restauranteId;
   final String? restauranteNombre;
+  final double? calificacionPromedio; // null = aún sin calificaciones
+  final int totalCalificaciones;
 
   const Producto({
     required this.id,
@@ -25,6 +27,8 @@ class Producto {
     required this.disponible,
     this.restauranteId,
     this.restauranteNombre,
+    this.calificacionPromedio,
+    this.totalCalificaciones = 0,
   });
 
   factory Producto.fromJson(Map<String, dynamic> json) => Producto(
@@ -37,6 +41,8 @@ class Producto {
         disponible: json['disponible'] as bool? ?? true,
         restauranteId: json['restaurante_id'] as int?,
         restauranteNombre: json['restaurante_nombre'] as String?,
+        calificacionPromedio: (json['calificacion_promedio'] as num?)?.toDouble(),
+        totalCalificaciones: (json['total_calificaciones'] as num?)?.toInt() ?? 0,
       );
 
   String get precioFormateado {

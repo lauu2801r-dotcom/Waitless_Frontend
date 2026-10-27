@@ -14,6 +14,8 @@ class RestauranteApi {
   final int totalPlatos;
   final int mesasLibres;
   final List<String> categorias;
+  final double? calificacionPromedio;
+  final int totalCalificaciones;
 
   const RestauranteApi({
     required this.id,
@@ -25,6 +27,8 @@ class RestauranteApi {
     this.totalPlatos = 0,
     this.mesasLibres = 0,
     this.categorias = const [],
+    this.calificacionPromedio,
+    this.totalCalificaciones = 0,
   });
 
   factory RestauranteApi.fromJson(Map<String, dynamic> j) => RestauranteApi(
@@ -41,6 +45,8 @@ class RestauranteApi {
         categorias: ((j['categorias'] as List<dynamic>?) ?? const [])
             .map((e) => e.toString())
             .toList(),
+        calificacionPromedio: (j['calificacion_promedio'] as num?)?.toDouble(),
+        totalCalificaciones: (j['total_calificaciones'] as num?)?.toInt() ?? 0,
       );
 }
 

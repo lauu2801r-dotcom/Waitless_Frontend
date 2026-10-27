@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/pedido_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pagar_pedido.dart';
+import '../widgets/calificar_pedido.dart';
 
 class DetallePedidoScreen extends StatelessWidget {
   final PedidoApi pedido;
@@ -284,6 +285,9 @@ class DetallePedidoScreen extends StatelessWidget {
 
             // ── Pago ──
             PagarPedido(pedido: pedido),
+
+            // ── Calificación (solo si ya está pagado) ──
+            CalificarPedido(pedido: pedido),
 
             // ── Llamar al mesero ──
             SizedBox(

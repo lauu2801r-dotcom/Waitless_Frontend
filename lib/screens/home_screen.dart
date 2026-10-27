@@ -392,6 +392,25 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
+            child: Row(
+              children: [
+                const Icon(Icons.star, color: Colors.amber, size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  producto.calificacionPromedio == null
+                      ? 'Aún sin calificaciones'
+                      : '${producto.calificacionPromedio!.toStringAsFixed(1)} (${producto.totalCalificaciones})',
+                  style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.cafeMedio),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
             child: Text(
               producto.precioFormateado,
               style: GoogleFonts.playfairDisplay(
@@ -890,7 +909,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             nombre: p.nombre,
                             categoria: p.categoria ?? '',
                             precio: p.precioFormateado,
-                            rating: '4.8',
+                            rating: p.calificacionPromedio?.toStringAsFixed(1) ?? 'Nuevo',
                             onTap: () => _abrirDetallePlato(p),
                           );
                         },
@@ -1012,7 +1031,8 @@ class _TarjetaRestaurante extends StatelessWidget {
                               fontWeight: FontWeight.w700,
                               color: AppColors.cafeOscuro)),
                       const SizedBox(height: 2),
-                      Text(r.tipoCocina ?? 'Restaurante',
+                      Text(
+                          '${r.tipoCocina ?? 'Restaurante'}${r.calificacionPromedio != null ? '  ·  ★ ${r.calificacionPromedio!.toStringAsFixed(1)}' : ''}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
