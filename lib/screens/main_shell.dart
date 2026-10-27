@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_strings.dart';
 import '../services/pedido_service.dart';
+import '../services/notificaciones_service.dart';
 import 'home_screen.dart';
 import 'pedidos_screen.dart';
 import 'prediccion_screen.dart';
@@ -19,16 +21,31 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _indice = 0;
   final Carrito _carrito = Carrito();
+  StreamSubscription<String>? _subAvisos;
 
   @override
   void initState() {
     super.initState();
     _carrito.addListener(_actualizarCarrito);
+    // Notificaciones reales: se conecta al canal personal y avisa con un toast.
+    final centro = NotificacionesCenter.instancia..iniciar();
+    _subAvisos = centro.avisos.listen((titulo) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('🔔 $titulo'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ));
+    });
   }
 
   @override
   void dispose() {
     _carrito.removeListener(_actualizarCarrito);
+    _subAvisos?.cancel();
+    NotificacionesCenter.instancia.detener();
     super.dispose();
   }
 

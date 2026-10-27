@@ -9,6 +9,8 @@ import '../services/restaurantes_service.dart';
 import 'menu_screen.dart';
 import 'reservas_screen.dart';
 import '../widgets/boton_favorito.dart';
+import '../widgets/notificaciones_sheet.dart';
+import '../services/notificaciones_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -159,42 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _verNotificaciones() {
-    _abrirHoja(
-      titulo: 'Notificaciones',
-      altura: 0.6,
-      contenido: const Column(
-        children: [
-          _ItemNotificacion(
-            icono: Icons.local_dining,
-            titulo: 'Tu pedido está en camino',
-            detalle: 'Pasta al pesto · llegando en 4 min',
-            tiempo: 'hace 2 min',
-            esNuevo: true,
-          ),
-          _ItemNotificacion(
-            icono: Icons.local_offer,
-            titulo: '20% en platos de temporada',
-            detalle: 'Solo hoy, aprovecha la oferta',
-            tiempo: 'hace 1 h',
-            esNuevo: true,
-          ),
-          _ItemNotificacion(
-            icono: Icons.star,
-            titulo: '¿Cómo estuvo tu última visita?',
-            detalle: 'Califica tu experiencia y gana puntos',
-            tiempo: 'ayer',
-          ),
-          _ItemNotificacion(
-            icono: Icons.event,
-            titulo: 'Recordatorio de reserva',
-            detalle: 'Mañana a las 8:00 pm · 4 personas',
-            tiempo: 'hace 2 días',
-          ),
-        ],
-      ),
-    );
-  }
+  void _verNotificaciones() => mostrarNotificaciones(context);
 
   void _abrirBuscador() {
     final ctrl = TextEditingController();
@@ -616,20 +583,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: InkWell(
                         customBorder: const CircleBorder(),
                         onTap: _verNotificaciones,
-                        child: const SizedBox(
+                        child: SizedBox(
                           width: 44,
                           height: 44,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Icon(Icons.notifications_outlined,
-                                  color: AppColors.terracota),
-                              Positioned(
-                                top: 10,
-                                right: 12,
-                                child: _PuntoNuevo(),
-                              ),
-                            ],
+                          child: ListenableBuilder(
+                            listenable: NotificacionesCenter.instancia,
+                            builder: (context, _) => Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                const Icon(Icons.notifications_outlined,
+                                    color: AppColors.terracota),
+                                if (NotificacionesCenter.instancia.noLeidas > 0)
+                                  const Positioned(
+                                    top: 10,
+                                    right: 12,
+                                    child: _PuntoNuevo(),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1155,81 +1126,6 @@ class _PuntoNuevo extends StatelessWidget {
       decoration: const BoxDecoration(
         color: AppColors.terracota,
         shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
-class _ItemNotificacion extends StatelessWidget {
-  final IconData icono;
-  final String titulo;
-  final String detalle;
-  final String tiempo;
-  final bool esNuevo;
-  const _ItemNotificacion({
-    required this.icono,
-    required this.titulo,
-    required this.detalle,
-    required this.tiempo,
-    this.esNuevo = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: esNuevo ? AppColors.alertaFondo : AppColors.superficie,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: esNuevo
-              ? AppColors.terracota.withValues(alpha: 0.3)
-              : AppColors.borde,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.terracota.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icono, color: AppColors.terracota, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(titulo,
-                          style: GoogleFonts.inter(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.cafeOscuro)),
-                    ),
-                    if (esNuevo) const _PuntoNuevo(),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(detalle,
-                    style: GoogleFonts.inter(
-                        fontSize: 11.5, color: AppColors.cafeMedio)),
-                const SizedBox(height: 4),
-                Text(tiempo,
-                    style: GoogleFonts.inter(
-                        fontSize: 10,
-                        color: AppColors.cafeMedio,
-                        letterSpacing: 0.4)),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

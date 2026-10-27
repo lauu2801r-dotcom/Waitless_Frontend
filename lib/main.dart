@@ -7,7 +7,7 @@ import 'services/app_settings.dart';
 import 'services/api_auth_repository.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
-impRort 'screens/main_shell.dart';
+import 'screens/main_shell.dart';
 import 'screens/admin/admin_shell.dart';
 import 'screens/empleado/empleado_shell.dart';
 import 'screens/splash_screen.dart';
