@@ -190,6 +190,51 @@ class DetallePedidoScreen extends StatelessWidget {
                         fontSize: 13, color: AppColors.cafeMedio),
                   ),
 
+                  if (pedido.minutosEstimados != null &&
+                      (pedido.estado == EstadoPedidoApi.pendiente ||
+                          pedido.estado == EstadoPedidoApi.en_preparacion)) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.infoFondo,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.timer_outlined,
+                              size: 20, color: AppColors.infoTexto),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Listo en unos ${pedido.minutosEstimados} min',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.infoTexto),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Estimado por la IA de WaitLess según la '
+                                  'carga de la cocina en este momento.',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      height: 1.35,
+                                      color: AppColors.infoTexto),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   if (pedido.notas != null && pedido.notas!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(

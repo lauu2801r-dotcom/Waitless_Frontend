@@ -124,6 +124,9 @@ class PedidoApi {
   final String? restauranteNombre;
   final int? mesaNumero;
 
+  /// Tiempo que la IA estimó para este pedido (minutos). Puede ser null en pedidos viejos.
+  final int? minutosEstimados;
+
   /// Número de mesa que ve el cliente (no el id interno).
   int get mesaVisible => mesaNumero ?? mesaId;
 
@@ -142,6 +145,7 @@ class PedidoApi {
     this.restauranteId,
     this.restauranteNombre,
     this.mesaNumero,
+    this.minutosEstimados,
   });
 
   factory PedidoApi.fromJson(Map<String, dynamic> json) => PedidoApi(
@@ -161,6 +165,7 @@ class PedidoApi {
         restauranteId: json['restaurante_id'] as int?,
         restauranteNombre: json['restaurante_nombre'] as String?,
         mesaNumero: json['mesa_numero'] as int?,
+        minutosEstimados: (json['minutos_estimados'] as num?)?.toInt(),
       );
 
   String get totalFormateado {

@@ -3,7 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_controller.dart';
 import '../services/prediccion_service.dart';
-import '../services/mesa_service.dart';
+import '../services/restaurantes_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_strings.dart';
 import '../widgets/common_widgets.dart';
@@ -18,8 +18,10 @@ class PrediccionScreen extends StatefulWidget {
 class _PrediccionScreenState extends State<PrediccionScreen> {
   // ── Datos de afluencia ──
   List<DatoAfluenciaHora> _afluencia = [];
-  int _mesasOcupadas = 0;
-  int _mesasTotales = 14;
+  List<DatoDiaSemana> _semana = [];
+  List<RestauranteApi> _restaurantes = [];
+  RestauranteApi? _restaurante;
+  ContextoRestaurante? _contexto;
   bool _cargando = true;
   String? _error;
   PrediccionTiempo? _prediccionAhora;
@@ -36,50 +38,67 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
     _cargarDatos();
   }
 
+  int get _mesasTotales => _contexto?.mesasTotales ?? 0;
+  int get _mesasLibres => _contexto?.mesasLibres ?? 0;
+
   Future<void> _cargarDatos() async {
     setState(() {
       _cargando = true;
       _error = null;
     });
 
+    // 1. Restaurantes (la primera vez) y cuál está elegido
+    if (_restaurantes.isEmpty) {
+      try {
+        _restaurantes = await RestaurantesService.listar();
+      } catch (_) {}
+    }
+    if (_restaurante == null && _restaurantes.isNotEmpty) {
+      _restaurante = _restaurantes.first;
+    }
+    final rid = _restaurante?.id;
     final ahora = DateTime.now();
 
-    final resultAfluencia = await PrediccionService.afluenciaPorHora(
+    // 2. Todo lo que depende de ese restaurante
+    final fAfluencia = PrediccionService.afluenciaPorHora(
       diaSemana: ahora.weekday - 1,
+      restauranteId: rid,
     );
-
-    int ocupadas = 0;
-    int totales = 14;
-    try {
-      final mesaService = MesaService();
-      final todasMesas = await mesaService.todasLasMesas();
-      ocupadas = todasMesas.where((m) => m.estado == 'ocupada').length;
-      totales = todasMesas.length;
-    } catch (_) {}
-
-    final resultPrediccion = await PrediccionService.predecirTiempoEspera(
+    final fSemana = PrediccionService.afluenciaSemanal(restauranteId: rid);
+    final fContexto = PrediccionService.contexto(restauranteId: rid);
+    final fPrediccion = PrediccionService.predecirTiempoEspera(
       hora: ahora.hour,
       diaSemana: ahora.weekday - 1,
-      mesasOcupadas: ocupadas,
       totalItems: _itemsSimulados,
       totalPedido: _totalSimulado,
+      restauranteId: rid,
     );
+
+    final resAfluencia = await fAfluencia;
+    final resSemana = await fSemana;
+    final resContexto = await fContexto;
+    final resPrediccion = await fPrediccion;
 
     if (!mounted) return;
     setState(() {
       _cargando = false;
-      if (resultAfluencia is IaExito<List<DatoAfluenciaHora>>) {
-        _afluencia = resultAfluencia.datos;
-      }
-      _mesasOcupadas = ocupadas;
-      _mesasTotales = totales;
-      if (resultPrediccion is IaExito<PrediccionTiempo>) {
-        _prediccionAhora = resultPrediccion.datos;
-        _prediccionSimulada = resultPrediccion.datos;
-      } else if (resultPrediccion is IaError) {
-        _error = (resultPrediccion as IaError<PrediccionTiempo>).mensaje;
+      if (resAfluencia case IaExito(:final datos)) _afluencia = datos;
+      if (resSemana case IaExito(:final datos)) _semana = datos;
+      if (resContexto case IaExito(:final datos)) _contexto = datos;
+      switch (resPrediccion) {
+        case IaExito(:final datos):
+          _prediccionAhora = datos;
+          _prediccionSimulada = datos;
+        case IaError(:final mensaje):
+          _error = mensaje;
       }
     });
+  }
+
+  void _elegirRestaurante(RestauranteApi r) {
+    if (_restaurante?.id == r.id) return;
+    setState(() => _restaurante = r);
+    _cargarDatos();
   }
 
   Future<void> _simularPedido() async {
@@ -88,9 +107,9 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
     final result = await PrediccionService.predecirTiempoEspera(
       hora: ahora.hour,
       diaSemana: ahora.weekday - 1,
-      mesasOcupadas: _mesasOcupadas,
       totalItems: _itemsSimulados,
       totalPedido: _totalSimulado,
+      restauranteId: _restaurante?.id,
     );
     if (!mounted) return;
     setState(() {
@@ -135,7 +154,12 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                 const SizedBox(height: 4),
                 Text('PREDICCIÓN DE AFLUENCIA · HOY',
                     style: AppTheme.etiqueta()),
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
+                if (_restaurantes.length > 1) ...[
+                  _selectorRestaurante(),
+                  const SizedBox(height: 14),
+                ],
+                const SizedBox(height: 6),
 
                 if (!conDatos) ...[
                   _tarjetaSinDatos(context),
@@ -184,7 +208,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                           ),
                         ),
                         Text(
-                          '${_mesasTotales - _mesasOcupadas} mesas libres',
+                          '$_mesasLibres mesas libres',
                           style: GoogleFonts.inter(
                               fontSize: 11, color: AppColors.cafeMedio),
                         ),
@@ -210,7 +234,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                         child: TarjetaMetrica(
                           etiqueta: 'MESAS LIBRES',
                           valor:
-                              '${_mesasTotales - _mesasOcupadas} / $_mesasTotales',
+                              '$_mesasLibres / $_mesasTotales',
                           colorFondo: AppColors.olivaFondo,
                         ),
                       ),
@@ -255,6 +279,43 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ── Selector de restaurante ─────────────────────────────────
+
+  Widget _selectorRestaurante() {
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _restaurantes.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final r = _restaurantes[i];
+          final sel = r.id == _restaurante?.id;
+          return GestureDetector(
+            onTap: () => _elegirRestaurante(r),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: sel ? AppColors.terracota : AppColors.superficie,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: sel ? AppColors.terracota : AppColors.borde),
+              ),
+              child: Text(
+                '${r.emoji} ${r.nombre}',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: sel ? Colors.white : AppColors.cafeMedio,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -462,20 +523,11 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
   // ── Tendencia semanal ───────────────────────────────────────
 
   Widget _graficaTendenciaSemanal() {
-    final base = _afluencia.isNotEmpty
-        ? _afluencia.map((h) => h.ocupacionPct).reduce((a, b) => a + b) /
-            _afluencia.length
-        : 65.0;
-
     final spots = [
-      FlSpot(0, (base * 0.85).clamp(0, 100)),
-      FlSpot(1, (base * 0.92).clamp(0, 100)),
-      FlSpot(2, (base * 0.78).clamp(0, 100)),
-      FlSpot(3, (base * 1.05).clamp(0, 100)),
-      FlSpot(4, (base * 1.20).clamp(0, 100)),
-      FlSpot(5, (base * 1.35).clamp(0, 100)),
-      FlSpot(6, (base * 1.10).clamp(0, 100)),
+      for (final d in _semana)
+        FlSpot(d.diaSemana.toDouble(), d.ocupacionPct.toDouble()),
     ];
+    final esReal = _semana.isNotEmpty && _semana.first.fuente == 'historial';
 
     final hoy = DateTime.now().weekday - 1;
 
@@ -486,7 +538,20 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.borde),
       ),
-      child: SizedBox(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              esReal
+                  ? 'Con los pedidos reales de las últimas 8 semanas'
+                  : 'Patrón típico (aún hay pocos pedidos en este restaurante)',
+              style: GoogleFonts.inter(
+                  fontSize: 10.5, color: AppColors.cafeMedio),
+            ),
+          ),
+          SizedBox(
         height: 140,
         child: LineChart(
           LineChartData(
@@ -562,6 +627,8 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
             ],
           ),
         ),
+          ),
+        ],
       ),
     );
   }
@@ -619,6 +686,12 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                     ),
                     Text(
                       'Rango: ${pred.rangoMin}–${pred.rangoMax} min',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: AppColors.cafeMedio),
+                    ),
+                    Text(
+                      'Confianza ${pred.confianza}%'
+                      '${pred.fuente == 'modelo' ? ' · IA' : ' · estimación básica'}',
                       style: GoogleFonts.inter(
                           fontSize: 11, color: AppColors.cafeMedio),
                     ),

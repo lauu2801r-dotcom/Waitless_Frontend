@@ -941,7 +941,8 @@ class _TarjetaPedido extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '· ${pedido.horaFormateada}',
+                            '· ${pedido.horaFormateada}'
+                            '${pedido.minutosEstimados != null && (pedido.estado == EstadoPedidoApi.pendiente || pedido.estado == EstadoPedidoApi.en_preparacion) ? ' · ~${pedido.minutosEstimados} min' : ''}',
                             style: GoogleFonts.inter(
                                 fontSize: 11, color: AppColors.cafeMedio),
                           ),
