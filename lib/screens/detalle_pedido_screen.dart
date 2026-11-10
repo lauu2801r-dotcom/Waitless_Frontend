@@ -120,7 +120,7 @@ class DetallePedidoScreen extends StatelessWidget {
     final pasos = [
       _PasoTimeline('Pendiente', EstadoPedidoApi.pendiente),
       _PasoTimeline('En preparación', EstadoPedidoApi.en_preparacion),
-      _PasoTimeline('Listo', EstadoPedidoApi.listo),
+      _PasoTimeline(pedido.esDomicilio ? 'En camino' : 'Listo', EstadoPedidoApi.listo),
       _PasoTimeline('Entregado', EstadoPedidoApi.entregado),
     ];
 
@@ -161,7 +161,7 @@ class DetallePedidoScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          pedido.estado.etiqueta,
+                          pedido.estadoEtiqueta,
                           style: GoogleFonts.inter(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -180,7 +180,7 @@ class DetallePedidoScreen extends StatelessWidget {
 
                   // Mesa e items
                   Text(
-                    'Mesa ${pedido.mesaVisible}',
+                    pedido.lugar,
                     style: AppTheme.titulo(size: 26),
                   ),
                   const SizedBox(height: 4),
@@ -212,7 +212,9 @@ class DetallePedidoScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Listo en unos ${pedido.minutosEstimados} min',
+                                  pedido.esDomicilio
+                                      ? 'Sale de cocina en unos ${pedido.minutosEstimados} min'
+                                      : 'Listo en unos ${pedido.minutosEstimados} min',
                                   style: GoogleFonts.inter(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
@@ -230,6 +232,51 @@ class DetallePedidoScreen extends StatelessWidget {
                               ],
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (pedido.esDomicilio) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.terracota.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            const Icon(Icons.location_on_outlined,
+                                size: 16, color: AppColors.terracota),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                pedido.direccionDomicilio ?? 'Sin dirección',
+                                style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.cafeOscuro),
+                              ),
+                            ),
+                          ]),
+                          if ((pedido.indicacionesDomicilio ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(pedido.indicacionesDomicilio!,
+                                style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                    color: AppColors.cafeMedio)),
+                          ],
+                          if ((pedido.telefonoContacto ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text('Contacto: ${pedido.telefonoContacto}',
+                                style: GoogleFonts.inter(
+                                    fontSize: 12, color: AppColors.cafeMedio)),
+                          ],
                         ],
                       ),
                     ),
@@ -307,6 +354,23 @@ class DetallePedidoScreen extends StatelessWidget {
                           ],
                         ),
                       )),
+                  if (pedido.esDomicilio && pedido.costoEnvio > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Envío',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, color: AppColors.cafeMedio)),
+                          Text('\$${pedido.costoEnvio.toInt()}',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppColors.cafeOscuro,
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   const Divider(color: AppColors.bordeSuave, height: 1),
                   const SizedBox(height: 12),
@@ -334,7 +398,8 @@ class DetallePedidoScreen extends StatelessWidget {
             // ── Calificación (solo si ya está pagado) ──
             CalificarPedido(pedido: pedido),
 
-            // ── Llamar al mesero ──
+            // ── Llamar al mesero (solo si está en el restaurante) ──
+            if (!pedido.esDomicilio)
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_controller.dart';
 import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
+import 'privacidad_datos_screen.dart';
 import '../utils/app_strings.dart';
 import 'login_screen.dart';
 import 'cliente_facturas_screen.dart';
@@ -526,6 +527,21 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 texto:
                     'Las predicciones de afluencia usan datos anónimos agregados.'),
           ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(context); // cierra la hoja
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PrivacidadDatosScreen()),
+                );
+              },
+              icon: const Icon(Icons.folder_open_outlined, size: 18),
+              label: const Text('Mis datos y eliminar cuenta'),
+            ),
+          ),
         ],
       ),
     );

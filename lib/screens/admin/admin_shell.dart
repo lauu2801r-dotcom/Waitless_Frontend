@@ -8,6 +8,8 @@ import 'admin_dashboard_screen.dart';
 import 'admin_pedidos_screen.dart';
 import 'admin_prediccion_screen.dart';
 import 'admin_perfil_screen.dart';
+import 'admin_reservas_screen.dart';
+import '../../widgets/campana_notificaciones.dart';
 
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
@@ -22,6 +24,7 @@ class _AdminShellState extends State<AdminShell> {
   final List<Widget> _pantallas = const [
     AdminDashboardScreen(),
     AdminPedidosScreen(),
+    AdminReservasScreen(),
     AdminPrediccionScreen(),
     AdminPerfilScreen(),
   ];
@@ -79,7 +82,8 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AvisosEnVivo(
+        child: Scaffold(
       appBar: AppBar(
         elevation: 0,
         title: Text(
@@ -91,6 +95,7 @@ class _AdminShellState extends State<AdminShell> {
           ),
         ),
         actions: [
+          const CampanaNotificaciones(),
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.terracota),
             tooltip: AppStrings.t(context, 'cerrar_sesion'),
@@ -135,6 +140,11 @@ class _AdminShellState extends State<AdminShell> {
               activeIcon: const Icon(Icons.receipt_long),
               label: AppStrings.t(context, 'pedidos'),
             ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.event_outlined),
+              activeIcon: Icon(Icons.event),
+              label: 'Reservas',
+            ),
             BottomNavigationBarItem(
               icon: const Icon(Icons.auto_graph_outlined),
               activeIcon: const Icon(Icons.auto_graph),
@@ -148,7 +158,7 @@ class _AdminShellState extends State<AdminShell> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   String _tituloActual() {
@@ -159,8 +169,10 @@ class _AdminShellState extends State<AdminShell> {
       case 1:
         return AppStrings.t(ctx, 'pedidos');
       case 2:
-        return AppStrings.t(ctx, 'analisis');
+        return 'Reservas';
       case 3:
+        return AppStrings.t(ctx, 'analisis');
+      case 4:
         return AppStrings.t(ctx, 'negocio');
       default:
         return 'Waitless';

@@ -20,6 +20,7 @@ IconData _icono(String tipo) => switch (tipo) {
       'pedido' => Icons.local_dining,
       'pago' => Icons.receipt_long,
       'reserva' => Icons.event,
+      'mesa' => Icons.table_restaurant,
       'calificacion' => Icons.star,
       'promo' => Icons.local_offer,
       _ => Icons.notifications,

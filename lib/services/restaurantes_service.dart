@@ -16,6 +16,11 @@ class RestauranteApi {
   final List<String> categorias;
   final double? calificacionPromedio;
   final int totalCalificaciones;
+  final bool? abiertoAhora; // null = sin horarios configurados
+  final bool domicilioActivo;
+  final int costoDomicilio;
+  final int pedidoMinimoDomicilio;
+  final String? telefono;
 
   const RestauranteApi({
     required this.id,
@@ -29,6 +34,11 @@ class RestauranteApi {
     this.categorias = const [],
     this.calificacionPromedio,
     this.totalCalificaciones = 0,
+    this.abiertoAhora,
+    this.domicilioActivo = true,
+    this.costoDomicilio = 5000,
+    this.pedidoMinimoDomicilio = 0,
+    this.telefono,
   });
 
   factory RestauranteApi.fromJson(Map<String, dynamic> j) => RestauranteApi(
@@ -47,10 +57,31 @@ class RestauranteApi {
             .toList(),
         calificacionPromedio: (j['calificacion_promedio'] as num?)?.toDouble(),
         totalCalificaciones: (j['total_calificaciones'] as num?)?.toInt() ?? 0,
+        abiertoAhora: j['abierto_ahora'] as bool?,
+        domicilioActivo: j['domicilio_activo'] as bool? ?? true,
+        costoDomicilio: (j['costo_domicilio'] as num?)?.toInt() ?? 5000,
+        pedidoMinimoDomicilio: (j['pedido_minimo_domicilio'] as num?)?.toInt() ?? 0,
+        telefono: j['telefono'] as String?,
       );
 }
 
 class RestaurantesService {
+  /// Datos actualizados de UN restaurante (envío, mínimo, si está abierto...). Null si falla.
+  static Future<RestauranteApi?> obtener(int id) async {
+    try {
+      final response = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/restaurantes/$id'))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return RestauranteApi.fromJson(
+            jsonDecode(response.body) as Map<String, dynamic>);
+      }
+    } catch (e) {
+      debugPrint('RestaurantesService.obtener ERROR: $e');
+    }
+    return null;
+  }
+
   static Future<List<RestauranteApi>> listar() async {
     try {
       final prefs = await SharedPreferences.getInstance();

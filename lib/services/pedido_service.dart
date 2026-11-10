@@ -57,6 +57,10 @@ extension EstadoPedidoApiX on EstadoPedidoApi {
     }
   }
 
+  /// En domicilio, "listo" significa que el pedido va en camino.
+  String etiquetaPara({required bool domicilio}) =>
+      (domicilio && this == EstadoPedidoApi.listo) ? 'En camino' : etiqueta;
+
   double get progreso {
     switch (this) {
       case EstadoPedidoApi.pendiente:      return 0.15;
@@ -111,7 +115,7 @@ class ItemPedidoApi {
 class PedidoApi {
   final int id;
   final int usuarioId;
-  final int mesaId;
+  final int? mesaId;
   final int? reservaId;
   final EstadoPedidoApi estado;
   final String? notas;
@@ -120,6 +124,9 @@ class PedidoApi {
   final DateTime creadoEn;
   final TipoEntregaApi tipoEntrega;
   final String? direccionDomicilio;
+  final String? telefonoContacto;
+  final String? indicacionesDomicilio;
+  final double costoEnvio;
   final int? restauranteId;
   final String? restauranteNombre;
   final int? mesaNumero;
@@ -127,13 +134,23 @@ class PedidoApi {
   /// Tiempo que la IA estimó para este pedido (minutos). Puede ser null en pedidos viejos.
   final int? minutosEstimados;
 
-  /// Número de mesa que ve el cliente (no el id interno).
-  int get mesaVisible => mesaNumero ?? mesaId;
+  bool get esDomicilio => tipoEntrega == TipoEntregaApi.domicilio;
+
+  /// Número de mesa que ve el cliente (no el id interno). Null en domicilio.
+  int? get mesaVisible => mesaNumero ?? mesaId;
+
+  /// "Mesa 4" o "Domicilio" según el tipo de pedido.
+  String get lugar => esDomicilio ? 'Domicilio' : 'Mesa ${mesaVisible ?? '-'}';
+
+  /// Estado con el nombre correcto según el tipo (en domicilio: "En camino").
+  String get estadoEtiqueta => estado.etiquetaPara(domicilio: esDomicilio);
+
+  double get subtotalPlatos => total - costoEnvio;
 
   const PedidoApi({
     required this.id,
     required this.usuarioId,
-    required this.mesaId,
+    this.mesaId,
     this.reservaId,
     required this.estado,
     this.notas,
@@ -142,6 +159,9 @@ class PedidoApi {
     required this.creadoEn,
     this.tipoEntrega = TipoEntregaApi.restaurante,
     this.direccionDomicilio,
+    this.telefonoContacto,
+    this.indicacionesDomicilio,
+    this.costoEnvio = 0,
     this.restauranteId,
     this.restauranteNombre,
     this.mesaNumero,
@@ -151,7 +171,7 @@ class PedidoApi {
   factory PedidoApi.fromJson(Map<String, dynamic> json) => PedidoApi(
         id: json['id'] as int,
         usuarioId: json['usuario_id'] as int,
-        mesaId: json['mesa_id'] as int,
+        mesaId: json['mesa_id'] as int?,
         reservaId: json['reserva_id'] as int?,
         estado: EstadoPedidoApiX.desdeCodigo(json['estado'] as String),
         notas: json['notas'] as String?,
@@ -162,6 +182,9 @@ class PedidoApi {
         creadoEn: DateTime.parse(json['creado_en'] as String),
         tipoEntrega: TipoEntregaApiX.desdeCodigo(json['tipo_entrega'] as String?),
         direccionDomicilio: json['direccion_domicilio'] as String?,
+        telefonoContacto: json['telefono_contacto'] as String?,
+        indicacionesDomicilio: json['indicaciones_domicilio'] as String?,
+        costoEnvio: (json['costo_envio'] as num?)?.toDouble() ?? 0,
         restauranteId: json['restaurante_id'] as int?,
         restauranteNombre: json['restaurante_nombre'] as String?,
         mesaNumero: json['mesa_numero'] as int?,
@@ -288,16 +311,19 @@ class PedidoService {
   }
 
   static Future<PedidoResultado<PedidoApi>> crearPedido({
-    required int mesaId,
+    int? mesaId,
     required List<ItemCarrito> items,
     String? notas,
     TipoEntregaApi tipoEntrega = TipoEntregaApi.restaurante,
     String? direccionDomicilio,
+    String? telefonoContacto,
+    String? indicacionesDomicilio,
   }) async {
     try {
       final headers = await _headers();
+      final esDomicilio = tipoEntrega == TipoEntregaApi.domicilio;
       final body = jsonEncode({
-        'mesa_id': mesaId,
+        if (!esDomicilio && mesaId != null) 'mesa_id': mesaId,
         'items': items
             .map((i) => {
                   'producto_id': i.producto.id,
@@ -307,10 +333,12 @@ class PedidoService {
             .toList(),
         if (notas != null && notas.isNotEmpty) 'notas': notas,
         'tipo_entrega': tipoEntrega.codigo,
-        if (tipoEntrega == TipoEntregaApi.domicilio &&
-            direccionDomicilio != null &&
-            direccionDomicilio.isNotEmpty)
+        if (esDomicilio && direccionDomicilio != null && direccionDomicilio.isNotEmpty)
           'direccion_domicilio': direccionDomicilio,
+        if (esDomicilio && telefonoContacto != null && telefonoContacto.isNotEmpty)
+          'telefono_contacto': telefonoContacto,
+        if (esDomicilio && indicacionesDomicilio != null && indicacionesDomicilio.isNotEmpty)
+          'indicaciones_domicilio': indicacionesDomicilio,
       });
 
       debugPrint('📦 PedidoService.crearPedido → POST $_base/pedidos/');
@@ -326,8 +354,7 @@ class PedidoService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return PedidoExito(PedidoApi.fromJson(data));
       }
-      final error = jsonDecode(response.body);
-      return PedidoError(error['detail'] ?? 'Error al crear pedido');
+      return PedidoError(_detalleError(response.body, 'Error al crear pedido'));
     } catch (e) {
       debugPrint('📦 PedidoService.crearPedido ERROR: $e');
       return PedidoError(_mensajeError(e));
@@ -427,7 +454,7 @@ class PedidoService {
 
   static Future<PedidoResultado<PedidoApi>> editarItemsPedido({
     required int pedidoId,
-    required int mesaId,
+    int? mesaId,
     required List<ItemCarrito> items,
     String? notas,
     TipoEntregaApi tipoEntrega = TipoEntregaApi.restaurante,
@@ -465,12 +492,26 @@ class PedidoService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return PedidoExito(PedidoApi.fromJson(data));
       }
-      final error = jsonDecode(response.body);
-      return PedidoError(error['detail'] ?? 'Error al editar pedido');
+      return PedidoError(_detalleError(response.body, 'Error al editar pedido'));
     } catch (e) {
       debugPrint('✏️ editarItemsPedido ERROR: $e');
       return PedidoError(_mensajeError(e));
     }
+  }
+
+  /// Lee el mensaje del servidor (texto o lista de validaciones de FastAPI).
+  static String _detalleError(String cuerpo, String porDefecto) {
+    try {
+      final d = jsonDecode(cuerpo);
+      final detalle = d is Map ? d['detail'] : null;
+      if (detalle is String && detalle.isNotEmpty) return detalle;
+      if (detalle is List && detalle.isNotEmpty) {
+        final primero = detalle.first;
+        final msg = primero is Map ? (primero['msg'] ?? '').toString() : primero.toString();
+        return msg.replaceFirst('Value error, ', '');
+      }
+    } catch (_) {}
+    return porDefecto;
   }
 
   static String _mensajeError(Object e) {

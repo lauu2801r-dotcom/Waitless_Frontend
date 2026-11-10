@@ -6,10 +6,17 @@ import '../../services/mesa_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_strings.dart';
 import '../login_screen.dart';
+import '../../widgets/notificaciones_sheet.dart' show mostrarNotificaciones;
 import 'admin_inventario_screen.dart';
 import 'admin_facturacion_screen.dart';
 import 'admin_personal_screen.dart';
 import 'admin_calificaciones_sheet.dart';
+import 'admin_horarios_screen.dart';
+import 'admin_contacto_screen.dart';
+import 'admin_galeria_screen.dart';
+import 'admin_promociones_screen.dart';
+import 'admin_seguridad_screen.dart';
+import 'admin_ayuda_screen.dart';
 import '../../services/calificaciones_service.dart';
 import '../../services/inventario_service.dart' show InvExito;
 
@@ -654,23 +661,20 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
                     valor: labelMesasOpcion,
                     onTap: () => _abrirMesas(context)),
                 _OpcionMenu(Icons.access_time, 'Horarios de atención',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Horarios',
-                        descripcion:
-                            'Define los días y horas de apertura, así como pausas y días festivos.',
-                        icono: Icons.access_time)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminHorariosScreen()),
+                        )),
                 _OpcionMenu(Icons.location_on_outlined, 'Ubicación y contacto',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Ubicación y contacto',
-                        descripcion:
-                            'Actualiza la dirección, teléfono y redes sociales de tu restaurante.',
-                        icono: Icons.location_on_outlined)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminContactoScreen()),
+                        )),
                 _OpcionMenu(Icons.image_outlined, 'Galería del restaurante',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Galería',
-                        descripcion:
-                            'Sube fotos de tus platos, ambiente y eventos para atraer más clientes.',
-                        icono: Icons.image_outlined)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminGaleriaScreen()),
+                        )),
               ]),
 
               const SizedBox(height: 20),
@@ -700,11 +704,10 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
                           ),
                         )),
                 _OpcionMenu(Icons.local_offer_outlined, 'Promociones',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Promociones',
-                        descripcion:
-                            'Crea descuentos por hora, día o cliente frecuente. Activa promos express.',
-                        icono: Icons.local_offer_outlined)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminPromocionesScreen()),
+                        )),
               ]),
 
               const SizedBox(height: 20),
@@ -713,23 +716,17 @@ class _AdminPerfilScreenState extends State<AdminPerfilScreen> {
               const SizedBox(height: 12),
               _GrupoOpciones(opciones: [
                 _OpcionMenu(Icons.notifications_outlined, 'Notificaciones',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Notificaciones',
-                        descripcion:
-                            'Recibe alertas de pedidos nuevos, mesas disponibles y reseñas.',
-                        icono: Icons.notifications_outlined)),
+                    onTap: () => mostrarNotificaciones(context)),
                 _OpcionMenu(Icons.security, 'Seguridad y acceso',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Seguridad',
-                        descripcion:
-                            'Cambia contraseña, activa autenticación de dos factores y gestiona sesiones.',
-                        icono: Icons.security)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminSeguridadScreen()),
+                        )),
                 _OpcionMenu(Icons.help_outline, 'Centro de ayuda',
-                    onTap: () => _abrirHoja(context,
-                        titulo: 'Centro de ayuda',
-                        descripcion:
-                            'Consulta tutoriales, FAQs y contacta a soporte técnico de WaitLess.',
-                        icono: Icons.help_outline)),
+                    onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminAyudaScreen()),
+                        )),
                 _OpcionMenu(Icons.info_outline, 'Acerca de',
                     onTap: () => showAboutDialog(
                           context: context,
@@ -844,9 +841,15 @@ class _TarjetaMesa extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${mesa.capacidad} personas'
-                  '${mesa.ubicacion != null ? ' · ${mesa.ubicacion}' : ''}',
+                  '${mesa.ubicacion != null ? ' · ${mesa.ubicacion}' : ''}'
+                  '${mesa.minutosOcupada != null ? ' · ocupada ${mesa.minutosOcupada} min' : ''}',
                   style: GoogleFonts.inter(
-                      fontSize: 11, color: AppColors.cafeMedio),
+                      fontSize: 11,
+                      fontWeight:
+                          mesa.alertaTiempo ? FontWeight.w700 : FontWeight.w400,
+                      color: mesa.alertaTiempo
+                          ? AppColors.terracotaOscuro
+                          : AppColors.cafeMedio),
                 ),
               ],
             ),

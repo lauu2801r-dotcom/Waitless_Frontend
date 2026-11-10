@@ -6,6 +6,8 @@ import '../../theme/app_theme.dart';
 import '../admin/admin_pedidos_screen.dart';
 import '../login_screen.dart';
 import 'empleado_mesas_screen.dart';
+import '../admin/admin_reservas_screen.dart';
+import '../../widgets/campana_notificaciones.dart';
 
 /// Vista del personal del restaurante (mesero, cocinero, cajero).
 /// El cargo es solo una etiqueta: todos ven lo mismo — pedidos y mesas de SU restaurante.
@@ -22,6 +24,7 @@ class _EmpleadoShellState extends State<EmpleadoShell> {
   final List<Widget> _pantallas = const [
     AdminPedidosScreen(),
     EmpleadoMesasScreen(),
+    AdminReservasScreen(),
   ];
 
   Future<void> _cerrarSesion() async {
@@ -63,11 +66,12 @@ class _EmpleadoShellState extends State<EmpleadoShell> {
   @override
   Widget build(BuildContext context) {
     final nombre = AuthScope.of(context).usuario?.primerNombre ?? '';
-    return Scaffold(
+    return AvisosEnVivo(
+        child: Scaffold(
       appBar: AppBar(
         elevation: 0,
         title: Text(
-          _indice == 0 ? 'Pedidos' : 'Mesas',
+          const ['Pedidos', 'Mesas', 'Reservas'][_indice],
           style: GoogleFonts.playfairDisplay(
               fontSize: 22,
               fontWeight: FontWeight.w600,
@@ -80,6 +84,7 @@ class _EmpleadoShellState extends State<EmpleadoShell> {
                   style: GoogleFonts.inter(
                       fontSize: 12.5, color: AppColors.cafeMedio)),
             ),
+          const CampanaNotificaciones(),
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.terracota),
             tooltip: 'Cerrar sesión',
@@ -108,8 +113,13 @@ class _EmpleadoShellState extends State<EmpleadoShell> {
             activeIcon: Icon(Icons.table_restaurant),
             label: 'Mesas',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.event_outlined),
+            activeIcon: Icon(Icons.event),
+            label: 'Reservas',
+          ),
         ],
       ),
-    );
+    ));
   }
 }

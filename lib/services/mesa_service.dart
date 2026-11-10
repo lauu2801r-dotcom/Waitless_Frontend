@@ -9,6 +9,8 @@ class MesaModel {
   final int capacidad;
   final String estado;
   final String? ubicacion;
+  final int? minutosOcupada;   // solo si está ocupada
+  final bool alertaTiempo;     // superó el tiempo máximo del restaurante
 
   MesaModel({
     required this.id,
@@ -16,6 +18,8 @@ class MesaModel {
     required this.capacidad,
     required this.estado,
     this.ubicacion,
+    this.minutosOcupada,
+    this.alertaTiempo = false,
   });
 
   factory MesaModel.fromJson(Map<String, dynamic> json) => MesaModel(
@@ -24,6 +28,8 @@ class MesaModel {
         capacidad: json['capacidad'],
         estado: json['estado'],
         ubicacion: json['ubicacion'],
+        minutosOcupada: json['minutos_ocupada'],
+        alertaTiempo: json['alerta_tiempo'] == true,
       );
 }
 

@@ -54,8 +54,9 @@ class ItemRecienteApi {
 
 class PedidoRecienteApi {
   final int id;
-  final int mesaId;
+  final int? mesaId;
   final int? mesaNumero;
+  final String tipoEntrega;
   final double total;
   final String estado;
   final int haceMinutos;
@@ -64,8 +65,9 @@ class PedidoRecienteApi {
 
   const PedidoRecienteApi({
     required this.id,
-    required this.mesaId,
+    this.mesaId,
     this.mesaNumero,
+    this.tipoEntrega = 'restaurante',
     required this.total,
     required this.estado,
     required this.haceMinutos,
@@ -73,13 +75,16 @@ class PedidoRecienteApi {
     this.items = const [],
   });
 
-  int get mesaVisible => mesaNumero ?? mesaId;
+  bool get esDomicilio => tipoEntrega == 'domicilio';
+  int? get mesaVisible => mesaNumero ?? mesaId;
+  String get lugar => esDomicilio ? 'Domicilio' : 'Mesa ${mesaVisible ?? '-'}';
 
   factory PedidoRecienteApi.fromJson(Map<String, dynamic> json) =>
       PedidoRecienteApi(
         id: json['id'] as int,
-        mesaId: json['mesa_id'] as int,
+        mesaId: json['mesa_id'] as int?,
         mesaNumero: json['mesa_numero'] as int?,
+        tipoEntrega: (json['tipo_entrega'] as String?) ?? 'restaurante',
         total: (json['total'] as num).toDouble(),
         estado: json['estado'] as String,
         haceMinutos: json['hace_minutos'] as int,

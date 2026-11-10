@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../models/reserva_model.dart';
 import '../services/reserva_service.dart';
 import '../services/mesa_service.dart';
+import '../services/tiempo_real_service.dart';
 
 class ReservasScreen extends StatefulWidget {
   const ReservasScreen({super.key});
@@ -21,31 +23,63 @@ class _ReservasScreenState extends State<ReservasScreen>
   bool _cargando = true;
   String? _error;
 
+  // Estado de la reserva en tiempo real (HU-021)
+  late final TiempoRealConexion _tiempoReal;
+  StreamSubscription<Map<String, dynamic>>? _suscripcion;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _cargarReservas();
+    _tiempoReal = TiempoRealConexion('mis-eventos')..conectar();
+    _suscripcion = _tiempoReal.eventos.listen((evento) {
+      if (evento['tipo'] == 'reserva_estado') {
+        _cargarReservas(silencioso: true);
+        final msg = evento['mensaje'] as String?;
+        if (msg != null && mounted) _avisar('🔔 $msg');
+      }
+    });
   }
 
   @override
   void dispose() {
+    _suscripcion?.cancel();
+    _tiempoReal.cerrar();
     _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _cargarReservas() async {
-    setState(() {
-      _cargando = true;
-      _error = null;
-    });
+  void _avisar(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.inter(color: AppColors.crema)),
+        backgroundColor: error ? AppColors.terracotaOscuro : AppColors.cafeOscuro,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Future<void> _cargarReservas({bool silencioso = false}) async {
+    if (!silencioso) {
+      setState(() {
+        _cargando = true;
+        _error = null;
+      });
+    }
     try {
       final reservas = await _service.misReservas();
+      if (!mounted) return;
       setState(() {
         _reservas = reservas;
         _cargando = false;
+        _error = null;
       });
     } catch (e) {
+      if (!mounted) return;
+      if (silencioso) return; // si falla en segundo plano, se deja lo que ya había
       setState(() {
         _error = e.toString();
         _cargando = false;
@@ -54,15 +88,31 @@ class _ReservasScreenState extends State<ReservasScreen>
   }
 
   Future<void> _cancelar(int id) async {
+    final motivoCtrl = TextEditingController();
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Cancelar reserva',
             style: GoogleFonts.inter(
                 fontWeight: FontWeight.w600, color: AppColors.cafeOscuro)),
-        content: Text(
-            '¿Estás seguro de que quieres cancelar esta reserva?',
-            style: GoogleFonts.inter(color: AppColors.cafeMedio)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('¿Estás seguro de que quieres cancelar esta reserva?',
+                style: GoogleFonts.inter(color: AppColors.cafeMedio)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: motivoCtrl,
+              maxLength: 255,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (opcional)',
+                hintText: 'Ej: me surgió un imprevisto',
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -79,36 +129,34 @@ class _ReservasScreenState extends State<ReservasScreen>
         ],
       ),
     );
+    final motivo = motivoCtrl.text.trim();
+    motivoCtrl.dispose();
     if (confirmar != true) return;
     try {
-      await _service.cancelarReserva(id);
-      _cargarReservas();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Reserva cancelada',
-                style: GoogleFonts.inter(color: AppColors.crema)),
-            backgroundColor: AppColors.cafeOscuro,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
+      await _service.cancelarReserva(id, motivo: motivo);
+      _cargarReservas(silencioso: true);
+      _avisar('Reserva cancelada');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString(),
-                style: GoogleFonts.inter(color: AppColors.crema)),
-            backgroundColor: AppColors.terracotaOscuro,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
+      _avisar(e.toString().replaceFirst('Exception: ', ''), error: true);
     }
+  }
+
+  void _modificar(ReservaModel reserva) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _FormularioModificar(
+        reserva: reserva,
+        onGuardada: () {
+          Navigator.pop(context);
+          _cargarReservas(silencioso: true);
+          _avisar('Reserva actualizada');
+        },
+      ),
+    );
   }
 
   void _abrirFormulario() {
@@ -201,12 +249,16 @@ class _ReservasScreenState extends State<ReservasScreen>
                     _ListaReservas(
                       reservas: activas,
                       onCancelar: _cancelar,
+                      onModificar: _modificar,
+                      onRefrescar: _cargarReservas,
                       vacio: 'No tienes reservas activas',
                       vacioBadge: '🗓️',
                     ),
                     _ListaReservas(
                       reservas: historial,
                       onCancelar: null,
+                      onModificar: null,
+                      onRefrescar: _cargarReservas,
                       vacio: 'Sin historial de reservas',
                       vacioBadge: '📋',
                     ),
@@ -221,12 +273,16 @@ class _ReservasScreenState extends State<ReservasScreen>
 class _ListaReservas extends StatelessWidget {
   final List<ReservaModel> reservas;
   final void Function(int id)? onCancelar;
+  final void Function(ReservaModel reserva)? onModificar;
+  final Future<void> Function({bool silencioso}) onRefrescar;
   final String vacio;
   final String vacioBadge;
 
   const _ListaReservas({
     required this.reservas,
     required this.onCancelar,
+    required this.onModificar,
+    required this.onRefrescar,
     required this.vacio,
     required this.vacioBadge,
   });
@@ -250,7 +306,7 @@ class _ListaReservas extends StatelessWidget {
     }
     return RefreshIndicator(
       color: AppColors.terracota,
-      onRefresh: () async {},
+      onRefresh: () => onRefrescar(silencioso: true),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
         itemCount: reservas.length,
@@ -258,6 +314,7 @@ class _ListaReservas extends StatelessWidget {
         itemBuilder: (_, i) => _TarjetaReserva(
           reserva: reservas[i],
           onCancelar: onCancelar,
+          onModificar: onModificar,
         ),
       ),
     );
@@ -269,9 +326,12 @@ class _ListaReservas extends StatelessWidget {
 class _TarjetaReserva extends StatelessWidget {
   final ReservaModel reserva;
   final void Function(int id)? onCancelar;
+  final void Function(ReservaModel reserva)? onModificar;
 
   const _TarjetaReserva(
-      {required this.reserva, required this.onCancelar});
+      {required this.reserva,
+      required this.onCancelar,
+      required this.onModificar});
 
   Color _colorEstado(String estado) => switch (estado) {
         'confirmada' => AppColors.oliva,
@@ -325,7 +385,7 @@ class _TarjetaReserva extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('Mesa ${reserva.mesaId}',
+              child: Text('Mesa ${reserva.mesaNumero ?? reserva.mesaId}',
                   style: GoogleFonts.inter(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
@@ -393,23 +453,45 @@ class _TarjetaReserva extends StatelessWidget {
                     color: AppColors.cafeMedio,
                     fontStyle: FontStyle.italic)),
           ],
-          if (onCancelar != null) ...[
+          if (reserva.estado == 'cancelada' &&
+              reserva.motivoCancelacion != null &&
+              reserva.motivoCancelacion!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Motivo: ${reserva.motivoCancelacion}',
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: AppColors.cafeMedio)),
+          ],
+          if (onCancelar != null || onModificar != null) ...[
             const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => onCancelar!(reserva.id),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.terracota,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                ),
-                child: Text('Cancelar reserva',
-                    style: GoogleFonts.inter(
-                        color: AppColors.terracota,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13)),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (onModificar != null)
+                  TextButton.icon(
+                    onPressed: () => onModificar!(reserva),
+                    icon: const Icon(Icons.edit_outlined,
+                        size: 16, color: AppColors.cafeOscuro),
+                    label: Text('Modificar',
+                        style: GoogleFonts.inter(
+                            color: AppColors.cafeOscuro,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13)),
+                  ),
+                if (onCancelar != null)
+                  TextButton(
+                    onPressed: () => onCancelar!(reserva.id),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.terracota,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                    ),
+                    child: Text('Cancelar reserva',
+                        style: GoogleFonts.inter(
+                            color: AppColors.terracota,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13)),
+                  ),
+              ],
             ),
           ],
         ],
@@ -852,6 +934,209 @@ class _FormularioReservaState extends State<_FormularioReserva> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Formulario modificar reserva ───────────────────────────────────────────
+
+class _FormularioModificar extends StatefulWidget {
+  final ReservaModel reserva;
+  final VoidCallback onGuardada;
+  const _FormularioModificar({required this.reserva, required this.onGuardada});
+
+  @override
+  State<_FormularioModificar> createState() => _FormularioModificarState();
+}
+
+class _FormularioModificarState extends State<_FormularioModificar> {
+  final _service = ReservaService();
+  late final TextEditingController _notasController;
+  late int _personas;
+  late DateTime _fecha;
+  late TimeOfDay _hora;
+  bool _guardando = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.reserva;
+    _personas = r.numeroPersonas.clamp(1, 6);
+    _fecha = DateTime(r.fechaHora.year, r.fechaHora.month, r.fechaHora.day);
+    _hora = TimeOfDay(hour: r.fechaHora.hour, minute: r.fechaHora.minute);
+    _notasController = TextEditingController(text: r.notas ?? '');
+  }
+
+  @override
+  void dispose() {
+    _notasController.dispose();
+    super.dispose();
+  }
+
+  ThemeData _tema(BuildContext context) => Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: AppColors.terracota,
+          onPrimary: AppColors.crema,
+          surface: AppColors.crema,
+        ),
+      );
+
+  Future<void> _elegirFecha() async {
+    final hoy = DateTime.now();
+    final f = await showDatePicker(
+      context: context,
+      initialDate: _fecha.isBefore(hoy) ? hoy : _fecha,
+      firstDate: hoy,
+      lastDate: hoy.add(const Duration(days: 60)),
+      builder: (context, child) => Theme(data: _tema(context), child: child!),
+    );
+    if (f != null) setState(() => _fecha = f);
+  }
+
+  Future<void> _elegirHora() async {
+    final h = await showTimePicker(
+      context: context,
+      initialTime: _hora,
+      builder: (context, child) => Theme(data: _tema(context), child: child!),
+    );
+    if (h != null) setState(() => _hora = h);
+  }
+
+  Future<void> _guardar() async {
+    setState(() {
+      _guardando = true;
+      _error = null;
+    });
+    try {
+      await _service.modificarReserva(
+        widget.reserva.id,
+        fechaHora: DateTime(_fecha.year, _fecha.month, _fecha.day, _hora.hour, _hora.minute),
+        numeroPersonas: _personas,
+        notas: _notasController.text.trim(),
+      );
+      widget.onGuardada();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _guardando = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fechaStr = '${_fecha.day}/${_fecha.month}/${_fecha.year}';
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 0, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.cremaOscura,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Modificar reserva', style: AppTheme.titulo(size: 22)),
+            const SizedBox(height: 4),
+            Text('Mesa ${widget.reserva.mesaNumero ?? widget.reserva.mesaId}',
+                style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio)),
+            const SizedBox(height: 18),
+            Text('PERSONAS', style: AppTheme.etiqueta()),
+            const SizedBox(height: 10),
+            Row(
+              children: List.generate(6, (index) {
+                final n = index + 1;
+                final sel = _personas == n;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _personas = n),
+                    child: Container(
+                      margin: EdgeInsets.only(right: index < 5 ? 6 : 0),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: sel ? AppColors.terracota : AppColors.superficie,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: sel ? AppColors.terracota : AppColors.borde),
+                      ),
+                      child: Center(
+                        child: Text('$n',
+                            style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: sel ? AppColors.crema : AppColors.cafeOscuro)),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 18),
+            Text('FECHA Y HORA', style: AppTheme.etiqueta()),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _elegirFecha,
+                  icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                  label: Text(fechaStr),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _elegirHora,
+                  icon: const Icon(Icons.access_time, size: 16),
+                  label: Text(_hora.format(context)),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 18),
+            Text('NOTAS', style: AppTheme.etiqueta()),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _notasController,
+              maxLines: 2,
+              maxLength: 500,
+              decoration: const InputDecoration(
+                hintText: 'Alergias, ocasión especial... (opcional)',
+                prefixIcon: Icon(Icons.note_outlined, color: AppColors.cafeMedio, size: 20),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Text(_error!,
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.terracotaOscuro)),
+            ],
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _guardando ? null : _guardar,
+                child: _guardando
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                            color: AppColors.crema, strokeWidth: 2))
+                    : const Text('GUARDAR CAMBIOS'),
+              ),
+            ),
+          ],
         ),
       ),
     );

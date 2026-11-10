@@ -28,6 +28,7 @@ class _EmpleadoMesasScreenState extends State<EmpleadoMesasScreen> {
   bool _cargando = true;
   String? _error;
 
+  Timer? _reloj;
   late final TiempoRealConexion _tiempoReal;
   StreamSubscription<Map<String, dynamic>>? _suscripcion;
 
@@ -35,10 +36,12 @@ class _EmpleadoMesasScreenState extends State<EmpleadoMesasScreen> {
   void initState() {
     super.initState();
     _cargar();
+    // los minutos ocupada se actualizan solos cada minuto
+    _reloj = Timer.periodic(const Duration(seconds: 60), (_) => _cargar(silencioso: true));
     _tiempoReal = TiempoRealConexion('mesas')..conectar();
     _suscripcion = _tiempoReal.eventos.listen((evento) {
       final tipo = evento['tipo'] as String? ?? '';
-      if (tipo == 'estado_mesa' || tipo == 'mesas_actualizadas') {
+      if (tipo == 'estado_mesa' || tipo == 'mesas_actualizadas' || tipo == 'mesa_alerta') {
         _cargar(silencioso: true);
       }
     });
@@ -46,6 +49,7 @@ class _EmpleadoMesasScreenState extends State<EmpleadoMesasScreen> {
 
   @override
   void dispose() {
+    _reloj?.cancel();
     _suscripcion?.cancel();
     _tiempoReal.cerrar();
     super.dispose();
@@ -211,7 +215,7 @@ class _EmpleadoMesasScreenState extends State<EmpleadoMesasScreen> {
                           physics: const NeverScrollableScrollPhysics(),
                           mainAxisSpacing: 10,
                           crossAxisSpacing: 10,
-                          childAspectRatio: 1.35,
+                          childAspectRatio: 1.2,
                           children: _mesas.map((m) {
                             final c = _color(m.estado);
                             return InkWell(
@@ -255,6 +259,34 @@ class _EmpleadoMesasScreenState extends State<EmpleadoMesasScreen> {
                                                 fontSize: 11,
                                                 color: AppColors.cafeMedio)),
                                         const SizedBox(height: 4),
+                                        if (m.minutosOcupada != null)
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(bottom: 3),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                    m.alertaTiempo
+                                                        ? Icons.warning_amber_rounded
+                                                        : Icons.timer_outlined,
+                                                    size: 12,
+                                                    color: m.alertaTiempo
+                                                        ? AppColors.terracotaOscuro
+                                                        : AppColors.cafeMedio),
+                                                const SizedBox(width: 3),
+                                                Text('${m.minutosOcupada} min',
+                                                    style: GoogleFonts.inter(
+                                                        fontSize: 11,
+                                                        fontWeight: m.alertaTiempo
+                                                            ? FontWeight.w700
+                                                            : FontWeight.w500,
+                                                        color: m.alertaTiempo
+                                                            ? AppColors.terracotaOscuro
+                                                            : AppColors.cafeMedio)),
+                                              ],
+                                            ),
+                                          ),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 8, vertical: 3),

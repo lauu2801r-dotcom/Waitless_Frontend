@@ -53,6 +53,16 @@ abstract class AuthRepository {
 
   Future<AuthResultado<String>> reenviarCodigo(String correo);
 
+  /// Envía un código al correo para recuperar la contraseña.
+  Future<AuthResultado<String>> solicitarRecuperacion(String correo);
+
+  /// Cambia la contraseña usando el código recibido por correo.
+  Future<AuthResultado<String>> restablecerPassword({
+    required String correo,
+    required String codigo,
+    required String nuevaPassword,
+  });
+
   Future<AuthResultado<Usuario>> iniciarSesion({
     required String correo,
     required String password,

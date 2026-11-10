@@ -208,6 +208,50 @@ class ApiAuthRepository implements AuthRepository {
     }
   }
 
+  // ── Recuperar contraseña ────────────────────────────────
+
+  @override
+  Future<AuthResultado<String>> solicitarRecuperacion(String correo) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/forgot-password'),
+        headers: _headersJson,
+        body: jsonEncode({'email': correo.trim()}),
+      );
+      if (response.statusCode == 200) {
+        return const AuthExito('Si la cuenta existe, te enviamos un código');
+      }
+      return AuthError(_mensajeError(response, 'No se pudo enviar el código'));
+    } catch (e) {
+      return AuthError('Error de conexión: $e');
+    }
+  }
+
+  @override
+  Future<AuthResultado<String>> restablecerPassword({
+    required String correo,
+    required String codigo,
+    required String nuevaPassword,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/reset-password'),
+        headers: _headersJson,
+        body: jsonEncode({
+          'email': correo.trim(),
+          'otp': codigo.trim(),
+          'nueva_password': nuevaPassword,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return const AuthExito('Contraseña actualizada');
+      }
+      return AuthError(_mensajeError(response, 'No se pudo cambiar la contraseña'));
+    } catch (e) {
+      return AuthError('Error de conexión: $e');
+    }
+  }
+
   @override
   Future<AuthResultado<Usuario>> iniciarSesion({
     required String correo,

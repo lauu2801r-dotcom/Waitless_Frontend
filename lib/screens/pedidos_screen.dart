@@ -413,7 +413,7 @@ class _ModalPedidoState extends State<_ModalPedido> {
   void initState() {
     super.initState();
     if (_esEdicion) {
-      _mesaCtrl.text = widget.pedidoExistente!.mesaId.toString(); // el servidor espera el id
+      _mesaCtrl.text = (widget.pedidoExistente!.mesaId ?? '').toString(); // el servidor espera el id
       _notasCtrl.text = widget.pedidoExistente!.notas ?? '';
       for (final item in widget.pedidoExistente!.items) {
         _cantidades[item.productoId] = item.cantidad;
@@ -457,7 +457,8 @@ class _ModalPedidoState extends State<_ModalPedido> {
 
   Future<void> _confirmar() async {
     final mesaId = int.tryParse(_mesaCtrl.text.trim());
-    if (mesaId == null) {
+    final esDomicilioEdicion = _esEdicion && widget.pedidoExistente!.esDomicilio;
+    if (mesaId == null && !esDomicilioEdicion) {
       setState(() => _errorGuardar = 'Ingresa un número de mesa válido');
       return;
     }
@@ -553,7 +554,8 @@ class _ModalPedidoState extends State<_ModalPedido> {
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     children: [
-                      // ── Mesa ──
+                      // ── Mesa (no aplica a domicilio) ──
+                      if (!(_esEdicion && widget.pedidoExistente!.esDomicilio)) ...[
                       Text('Mesa', style: AppTheme.etiqueta()),
                       const SizedBox(height: 6),
                       TextField(
@@ -582,6 +584,7 @@ class _ModalPedidoState extends State<_ModalPedido> {
                       ),
 
                       const SizedBox(height: 20),
+                      ],
 
                       // ── Productos ──
                       Text('Productos', style: AppTheme.etiqueta()),
@@ -892,7 +895,7 @@ class _TarjetaPedido extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${pedido.restauranteNombre == null ? '' : '${pedido.restauranteNombre} · '}Mesa ${pedido.mesaVisible} · $cantItems ${cantItems == 1 ? 'producto' : 'productos'}',
+                        '${pedido.restauranteNombre == null ? '' : '${pedido.restauranteNombre} · '}${pedido.lugar} · $cantItems ${cantItems == 1 ? 'producto' : 'productos'}',
                         style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -932,7 +935,7 @@ class _TarjetaPedido extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              pedido.estado.etiqueta,
+                              pedido.estadoEtiqueta,
                               style: GoogleFonts.inter(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_controller.dart';
 import '../../services/dashboard_service.dart';
+import '../../services/tiempo_real_service.dart';
 import '../../utils/app_strings.dart';
 import '../../utils/formato.dart';
 
@@ -17,25 +19,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   DashboardApi? _datos;
   bool _cargando = true;
   String? _error;
+  DateTime? _actualizado;
+
+  // Actualización automática (HU-017): cada 60 s y cuando llega un evento en vivo.
+  static const _cadaSegundos = 60;
+  Timer? _timer;
+  Timer? _antirrebote;
+  late final TiempoRealConexion _tiempoReal;
+  StreamSubscription<Map<String, dynamic>>? _suscripcion;
 
   @override
   void initState() {
     super.initState();
     _cargar();
+    _timer = Timer.periodic(
+      const Duration(seconds: _cadaSegundos),
+      (_) => _cargar(silencioso: true),
+    );
+    _tiempoReal = TiempoRealConexion('dashboard')..conectar();
+    _suscripcion = _tiempoReal.eventos.listen((_) {
+      // Varios eventos seguidos → una sola recarga.
+      _antirrebote?.cancel();
+      _antirrebote = Timer(const Duration(seconds: 2), () => _cargar(silencioso: true));
+    });
   }
 
-  Future<void> _cargar() async {
-    setState(() {
-      _cargando = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _antirrebote?.cancel();
+    _suscripcion?.cancel();
+    _tiempoReal.cerrar();
+    super.dispose();
+  }
+
+  String _horaActualizado() {
+    final t = _actualizado;
+    if (t == null) return '';
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
+  }
+
+  /// [silencioso]: recarga en segundo plano, sin spinner y sin borrar lo que ya se ve.
+  Future<void> _cargar({bool silencioso = false}) async {
+    if (!mounted) return;
+    if (!silencioso) {
+      setState(() {
+        _cargando = true;
+        _error = null;
+      });
+    }
     final resultado = await DashboardService.obtenerDashboard();
     if (!mounted) return;
     setState(() {
       _cargando = false;
       if (resultado is DashboardExito) {
         _datos = resultado.datos;
-      } else if (resultado is DashboardError) {
+        _error = null;
+        _actualizado = DateTime.now();
+      } else if (resultado is DashboardError && !silencioso) {
         _error = resultado.mensaje;
       }
     });
@@ -78,6 +119,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         Text(AppStrings.t(context, 'resumen_hoy'),
                             style: GoogleFonts.inter(
                                 fontSize: 13, color: AppColors.cafeMedio)),
+                        if (_actualizado != null) ...[
+                          const SizedBox(height: 2),
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.autorenew, size: 11, color: AppColors.oliva),
+                            const SizedBox(width: 4),
+                            Text('En vivo · ${_horaActualizado()}',
+                                style: GoogleFonts.inter(
+                                    fontSize: 11, color: AppColors.cafeMedio)),
+                          ]),
+                        ],
                       ],
                     ),
                     IconButton(
@@ -233,7 +284,7 @@ class _CuerpoDashboard extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 4),
-      Text('Mesa ${p.mesaVisible} · ${p.tiempoFormateado}',
+      Text('${p.lugar} · ${p.tiempoFormateado}',
           style: GoogleFonts.inter(fontSize: 12, color: AppColors.cafeMedio)),
       const SizedBox(height: 16),
       Text('DETALLE DEL PEDIDO', style: AppTheme.etiqueta()),
@@ -371,7 +422,9 @@ class _CuerpoDashboard extends StatelessWidget {
                 onTap: () => _detallePedido(context, p),
                 child: _TarjetaPedidoReciente(
                   id: p.id,
-                  mesaId: p.mesaVisible,
+                  lugar: p.lugar,
+                  esDomicilio: p.esDomicilio,
+                  numero: p.mesaVisible,
                   total: p.total,
                   estado: _emojiEstado(p.estado),
                   tiempo: p.tiempoFormateado,
@@ -490,7 +543,9 @@ class _TarjetaMetrica extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 class _TarjetaPedidoReciente extends StatelessWidget {
   final int id;
-  final int mesaId;
+  final String lugar;
+  final bool esDomicilio;
+  final int? numero;
   final double total;
   final String estado;
   final String tiempo;
@@ -498,7 +553,9 @@ class _TarjetaPedidoReciente extends StatelessWidget {
 
   const _TarjetaPedidoReciente({
     required this.id,
-    required this.mesaId,
+    required this.lugar,
+    required this.esDomicilio,
+    required this.numero,
     required this.total,
     required this.estado,
     required this.tiempo,
@@ -535,11 +592,13 @@ class _TarjetaPedidoReciente extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child: Text('#$mesaId',
-                  style: GoogleFonts.playfairDisplay(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: colorEstado)),
+              child: esDomicilio
+                  ? Icon(Icons.delivery_dining, color: colorEstado, size: 22)
+                  : Text('#${numero ?? '-'}',
+                      style: GoogleFonts.playfairDisplay(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: colorEstado)),
             ),
           ),
           const SizedBox(width: 12),
@@ -547,7 +606,7 @@ class _TarjetaPedidoReciente extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Mesa $mesaId · Pedido #$id',
+                Text('$lugar · Pedido #$id',
                     style: GoogleFonts.inter(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

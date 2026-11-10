@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/pedido_service.dart';
 import '../services/menu_service.dart';
+import '../services/restaurantes_service.dart';
 import '../theme/app_theme.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -27,6 +28,11 @@ class _CarritoScreenState extends State<CarritoScreen> {
   final Carrito _carrito = Carrito();
   final _notasCtrl = TextEditingController();
   final _direccionCtrl = TextEditingController();
+  final _telefonoCtrl = TextEditingController();
+  final _indicacionesCtrl = TextEditingController();
+
+  // Datos del restaurante (envío, mínimo, si está abierto)
+  RestauranteApi? _restaurante;
 
   // Tipo de entrega (editable en esta pantalla si el usuario quiere cambiar)
   late TipoEntregaApi _tipoEntrega;
@@ -43,13 +49,68 @@ class _CarritoScreenState extends State<CarritoScreen> {
     _tipoEntrega = widget.tipoEntrega;
     _direccionCtrl.text = widget.direccionDomicilio ?? '';
     _cargarMesas();
+    _cargarRestaurante();
+    _recordarDatosDomicilio();
   }
 
   @override
   void dispose() {
     _notasCtrl.dispose();
     _direccionCtrl.dispose();
+    _telefonoCtrl.dispose();
+    _indicacionesCtrl.dispose();
     super.dispose();
+  }
+
+  // ── Domicilio: datos del restaurante y últimos datos del cliente ──
+  Future<void> _cargarRestaurante() async {
+    final id = _carrito.restauranteId;
+    if (id == null) return;
+    final r = await RestaurantesService.obtener(id);
+    if (!mounted) return;
+    setState(() => _restaurante = r);
+  }
+
+  Future<void> _recordarDatosDomicilio() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      if (_direccionCtrl.text.isEmpty) {
+        _direccionCtrl.text = prefs.getString('waitless.dom.direccion') ?? '';
+      }
+      _telefonoCtrl.text = prefs.getString('waitless.dom.telefono') ?? '';
+      _indicacionesCtrl.text = prefs.getString('waitless.dom.indicaciones') ?? '';
+      setState(() {});
+    } catch (_) {}
+  }
+
+  Future<void> _guardarDatosDomicilio() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('waitless.dom.direccion', _direccionCtrl.text.trim());
+      await prefs.setString('waitless.dom.telefono', _telefonoCtrl.text.trim());
+      await prefs.setString('waitless.dom.indicaciones', _indicacionesCtrl.text.trim());
+    } catch (_) {}
+  }
+
+  bool get _esDomicilio => _tipoEntrega == TipoEntregaApi.domicilio;
+  bool get _domicilioDisponible => _restaurante?.domicilioActivo ?? true;
+  bool get _restauranteCerrado => _restaurante?.abiertoAhora == false;
+  int get _costoEnvio => _esDomicilio ? (_restaurante?.costoDomicilio ?? 5000) : 0;
+  int get _pedidoMinimo => _restaurante?.pedidoMinimoDomicilio ?? 0;
+  double get _faltaParaMinimo =>
+      (_esDomicilio && _pedidoMinimo > 0) ? (_pedidoMinimo - _carrito.total) : 0;
+  double get _totalFinal => _carrito.total + _costoEnvio;
+
+  String _dinero(num v) =>
+      '\$${v.round().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
+
+  bool get _puedeConfirmar {
+    if (_enviando) return false;
+    if (_esDomicilio) {
+      return _domicilioDisponible && !_restauranteCerrado && _faltaParaMinimo <= 0;
+    }
+    return _mesaSeleccionada != null && !_cargandoMesas;
   }
 
   Future<void> _cargarMesas() async {
@@ -68,26 +129,32 @@ class _CarritoScreenState extends State<CarritoScreen> {
       _snack('El carrito está vacío', esError: true);
       return;
     }
-    if (_mesaSeleccionada == null) {
+    if (_esDomicilio) {
+      final direccion = _direccionCtrl.text.trim();
+      final telefono = _telefonoCtrl.text.trim();
+      if (direccion.length < 8) {
+        _snack('Escribe la dirección completa (calle, número y barrio)', esError: true);
+        return;
+      }
+      if (telefono.replaceAll(RegExp(r'[^0-9]'), '').length < 7) {
+        _snack('Escribe un teléfono de contacto válido', esError: true);
+        return;
+      }
+    } else if (_mesaSeleccionada == null) {
       _snack('Selecciona una mesa', esError: true);
-      return;
-    }
-    if (_tipoEntrega == TipoEntregaApi.domicilio &&
-        _direccionCtrl.text.trim().isEmpty) {
-      _snack('Ingresa la dirección de domicilio', esError: true);
       return;
     }
 
     setState(() => _enviando = true);
 
     final resultado = await PedidoService.crearPedido(
-      mesaId: _mesaSeleccionada!.id,
+      mesaId: _esDomicilio ? null : _mesaSeleccionada!.id,
       items: _carrito.items.toList(),
       notas: _notasCtrl.text.trim(),
       tipoEntrega: _tipoEntrega,
-      direccionDomicilio: _tipoEntrega == TipoEntregaApi.domicilio
-          ? _direccionCtrl.text.trim()
-          : null,
+      direccionDomicilio: _esDomicilio ? _direccionCtrl.text.trim() : null,
+      telefonoContacto: _esDomicilio ? _telefonoCtrl.text.trim() : null,
+      indicacionesDomicilio: _esDomicilio ? _indicacionesCtrl.text.trim() : null,
     );
 
     setState(() => _enviando = false);
@@ -95,9 +162,13 @@ class _CarritoScreenState extends State<CarritoScreen> {
     if (!mounted) return;
 
     if (resultado is PedidoExito<PedidoApi>) {
+      if (_esDomicilio) await _guardarDatosDomicilio();
       _carrito.limpiar();
+      if (!mounted) return;
       Navigator.pop(context);
-      _snack('¡Pedido #${resultado.datos.id} enviado a cocina! 🍽️');
+      _snack(_esDomicilio
+          ? '¡Domicilio #${resultado.datos.id} enviado a cocina! 🛵'
+          : '¡Pedido #${resultado.datos.id} enviado a cocina! 🍽️');
     } else if (resultado is PedidoError<PedidoApi>) {
       _snack(resultado.mensaje, esError: true);
     }
@@ -230,60 +301,81 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                     etiqueta: 'Domicilio',
                                     seleccionado: _tipoEntrega ==
                                         TipoEntregaApi.domicilio,
-                                    onTap: () => setState(() =>
-                                        _tipoEntrega =
-                                            TipoEntregaApi.domicilio),
+                                    onTap: () => _domicilioDisponible
+                                        ? setState(() => _tipoEntrega =
+                                            TipoEntregaApi.domicilio)
+                                        : _snack(
+                                            'Este restaurante no tiene domicilio por ahora',
+                                            esError: true),
                                   ),
                                 ),
                               ],
                             ),
 
-                            // ── Dirección (solo si domicilio) ──
-                            if (_tipoEntrega == TipoEntregaApi.domicilio) ...[
+                            // ── Domicilio ──
+                            if (_esDomicilio) ...[
+                              const SizedBox(height: 16),
+                              if (!_domicilioDisponible)
+                                _AvisoCarrito(
+                                  icono: Icons.block,
+                                  texto:
+                                      '${_carrito.restauranteNombre ?? 'Este restaurante'} no tiene domicilio por ahora. Elige "Restaurante" para pedir en una mesa.',
+                                )
+                              else if (_restauranteCerrado)
+                                const _AvisoCarrito(
+                                  icono: Icons.schedule,
+                                  texto:
+                                      'El restaurante está cerrado en este momento, así que no puede recibir domicilios. Intenta en su horario de atención.',
+                                ),
+                              if (_domicilioDisponible && _pedidoMinimo > 0) ...[
+                                const SizedBox(height: 8),
+                                _AvisoCarrito(
+                                  icono: _faltaParaMinimo > 0
+                                      ? Icons.shopping_bag_outlined
+                                      : Icons.check_circle_outline,
+                                  texto: _faltaParaMinimo > 0
+                                      ? 'Pedido mínimo para domicilio: ${_dinero(_pedidoMinimo)}. Te faltan ${_dinero(_faltaParaMinimo)}.'
+                                      : 'Superaste el pedido mínimo (${_dinero(_pedidoMinimo)}).',
+                                  ok: _faltaParaMinimo <= 0,
+                                ),
+                              ],
                               const SizedBox(height: 16),
                               Text('DIRECCIÓN DE ENTREGA',
                                   style: AppTheme.etiqueta()),
                               const SizedBox(height: 8),
-                              TextField(
+                              _CampoCarrito(
                                 controller: _direccionCtrl,
-                                style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    color: AppColors.cafeOscuro),
-                                decoration: InputDecoration(
-                                  hintText: 'Calle, barrio, ciudad...',
-                                  hintStyle: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      color: AppColors.cafeMedio),
-                                  prefixIcon: const Icon(
-                                      Icons.location_on_outlined,
-                                      color: AppColors.terracota,
-                                      size: 18),
-                                  filled: true,
-                                  fillColor: AppColors.superficie,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                        color: AppColors.borde),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                        color: AppColors.borde),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                        color: AppColors.terracota),
-                                  ),
-                                  contentPadding:
-                                      const EdgeInsets.all(14),
-                                ),
+                                hint: 'Calle, número, barrio, ciudad',
+                                icono: Icons.location_on_outlined,
+                                maxLength: 300,
+                                tipoTeclado: TextInputType.streetAddress,
+                              ),
+                              const SizedBox(height: 12),
+                              Text('TELÉFONO DE CONTACTO',
+                                  style: AppTheme.etiqueta()),
+                              const SizedBox(height: 8),
+                              _CampoCarrito(
+                                controller: _telefonoCtrl,
+                                hint: 'Para avisarte cuando llegue',
+                                icono: Icons.phone_outlined,
+                                maxLength: 20,
+                                tipoTeclado: TextInputType.phone,
+                              ),
+                              const SizedBox(height: 12),
+                              Text('INDICACIONES (opcional)',
+                                  style: AppTheme.etiqueta()),
+                              const SizedBox(height: 8),
+                              _CampoCarrito(
+                                controller: _indicacionesCtrl,
+                                hint: 'Torre, apto, portería, punto de referencia...',
+                                icono: Icons.pin_drop_outlined,
+                                maxLength: 200,
                               ),
                             ],
 
+                            // ── Seleccionar mesa (solo en el restaurante) ──
+                            if (!_esDomicilio) ...[
                             const SizedBox(height: 24),
-
-                            // ── Seleccionar mesa ──
                             Text('MESA', style: AppTheme.etiqueta()),
                             const SizedBox(height: 10),
                             _cargandoMesas
@@ -345,6 +437,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                                 ))
                                             .toList(),
                                       ),
+
+                            ],
 
                             const SizedBox(height: 24),
 
@@ -426,6 +520,18 @@ class _CarritoScreenState extends State<CarritoScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
+                          if (_esDomicilio) ...[
+                            _FilaTotal(
+                                etiqueta: 'Platos',
+                                valor: _dinero(_carrito.total)),
+                            const SizedBox(height: 4),
+                            _FilaTotal(
+                                etiqueta: 'Envío',
+                                valor: _costoEnvio == 0
+                                    ? 'Gratis'
+                                    : _dinero(_costoEnvio)),
+                            const SizedBox(height: 8),
+                          ],
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -434,7 +540,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                       fontSize: 16,
                                       color: AppColors.cafeMedio)),
                               Text(
-                                _carrito.totalFormateado,
+                                _dinero(_totalFinal),
                                 style: GoogleFonts.playfairDisplay(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w700,
@@ -447,11 +553,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: (_enviando ||
-                                      _mesaSeleccionada == null ||
-                                      _cargandoMesas)
-                                  ? null
-                                  : _confirmarPedido,
+                              onPressed:
+                                  _puedeConfirmar ? _confirmarPedido : null,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.terracota,
                                 padding:
@@ -468,7 +571,9 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                           color: AppColors.crema),
                                     )
                                   : Text(
-                                      'CONFIRMAR PEDIDO · ${_carrito.totalFormateado}',
+                                      _esDomicilio
+                                          ? 'PEDIR A DOMICILIO · ${_dinero(_totalFinal)}'
+                                          : 'CONFIRMAR PEDIDO · ${_dinero(_totalFinal)}',
                                       style: GoogleFonts.inter(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,
@@ -818,5 +923,95 @@ class MesaService {
       debugPrint('MesaService ERROR: $e');
       return [];
     }
+  }
+}
+
+class _AvisoCarrito extends StatelessWidget {
+  final IconData icono;
+  final String texto;
+  final bool ok;
+  const _AvisoCarrito({required this.icono, required this.texto, this.ok = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ok ? AppColors.exitoTexto : AppColors.alertaTexto;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: ok ? AppColors.exitoTexto.withValues(alpha: 0.10) : AppColors.alertaFondo,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icono, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(texto,
+                style: GoogleFonts.inter(fontSize: 12.5, height: 1.35, color: color)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CampoCarrito extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData icono;
+  final int maxLength;
+  final TextInputType? tipoTeclado;
+  const _CampoCarrito({
+    required this.controller,
+    required this.hint,
+    required this.icono,
+    required this.maxLength,
+    this.tipoTeclado,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    OutlineInputBorder borde(Color c) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: c),
+        );
+    return TextField(
+      controller: controller,
+      keyboardType: tipoTeclado,
+      maxLength: maxLength,
+      style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeOscuro),
+      decoration: InputDecoration(
+        counterText: '',
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio),
+        prefixIcon: Icon(icono, color: AppColors.terracota, size: 18),
+        filled: true,
+        fillColor: AppColors.superficie,
+        border: borde(AppColors.borde),
+        enabledBorder: borde(AppColors.borde),
+        focusedBorder: borde(AppColors.terracota),
+        contentPadding: const EdgeInsets.all(14),
+      ),
+    );
+  }
+}
+
+class _FilaTotal extends StatelessWidget {
+  final String etiqueta;
+  final String valor;
+  const _FilaTotal({required this.etiqueta, required this.valor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(etiqueta,
+            style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeMedio)),
+        Text(valor,
+            style: GoogleFonts.inter(fontSize: 13, color: AppColors.cafeOscuro)),
+      ],
+    );
   }
 }

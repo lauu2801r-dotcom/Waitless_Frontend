@@ -78,6 +78,22 @@ class AuthController extends ChangeNotifier {
     return repositorio.reenviarCodigo(correo);
   }
 
+  Future<AuthResultado<String>> solicitarRecuperacion(String correo) {
+    return repositorio.solicitarRecuperacion(correo);
+  }
+
+  Future<AuthResultado<String>> restablecerPassword({
+    required String correo,
+    required String codigo,
+    required String nuevaPassword,
+  }) {
+    return repositorio.restablecerPassword(
+      correo: correo,
+      codigo: codigo,
+      nuevaPassword: nuevaPassword,
+    );
+  }
+
   Future<AuthResultado<Usuario>> iniciarSesion({
     required String correo,
     required String password,

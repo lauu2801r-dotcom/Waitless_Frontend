@@ -7,6 +7,7 @@ import '../utils/validadores.dart';
 import 'main_shell.dart';
 import 'admin/admin_shell.dart';
 import 'empleado/empleado_shell.dart';
+import 'recuperar_password_screen.dart';
 import 'registro_tipo_screen.dart';
 import 'verificacion_screen.dart';
 
@@ -33,110 +34,19 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _olvideContrasena(BuildContext context) {
-    final correoCtrl = TextEditingController(text: _correoCtrl.text);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          12,
-          24,
-          MediaQuery.of(ctx).viewInsets.bottom + 28,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.cremaOscura,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Center(
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.terracota.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.lock_reset,
-                    color: AppColors.terracota, size: 32),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text('Recuperar contraseña',
-                textAlign: TextAlign.center,
-                style: AppTheme.titulo(size: 22)),
-            const SizedBox(height: 6),
-            Text(
-              'Ingresa tu correo y te enviaremos un enlace para crear una nueva contraseña.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                color: AppColors.cafeMedio,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: correoCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'CORREO ELECTRÓNICO',
-                hintText: 'tu@correo.com',
-                prefixIcon: Icon(Icons.mail_outline,
-                    color: AppColors.cafeMedio, size: 20),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                final correo = correoCtrl.text.trim();
-                Navigator.pop(ctx);
-                if (correo.isEmpty) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Si la cuenta existe, te enviamos un enlace a $correo',
-                      style: GoogleFonts.inter(color: AppColors.crema),
-                    ),
-                    backgroundColor: AppColors.oliva,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                );
-              },
-              child: const Text('ENVIAR ENLACE'),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                'Cancelar',
-                style: GoogleFonts.inter(
-                  color: AppColors.cafeMedio,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
+  Future<void> _olvideContrasena(BuildContext context) async {
+    final correo = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => RecuperarPasswordScreen(correoInicial: _correoCtrl.text),
       ),
     );
+    // Si cambió la contraseña, deja el correo listo para iniciar sesión
+    if (correo != null && mounted) {
+      setState(() {
+        _correoCtrl.text = correo;
+        _errorGeneral = null;
+      });
+    }
   }
 
   Future<void> _ingresar() async {

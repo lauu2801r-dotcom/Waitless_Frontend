@@ -80,7 +80,7 @@ class _AdminPedidosScreenState extends State<AdminPedidosScreen> {
     if (resultado is PedidoExito<PedidoApi>) {
       final idx = _pedidos.indexWhere((p) => p.id == pedido.id);
       if (idx >= 0) setState(() => _pedidos[idx] = resultado.datos);
-      _snack('Pedido #${pedido.id} → ${nuevoEstado.etiqueta}');
+      _snack('Pedido #${pedido.id} → ${nuevoEstado.etiquetaPara(domicilio: pedido.esDomicilio)}');
     } else if (resultado is PedidoError<PedidoApi>) {
       _snack(resultado.mensaje, esError: true);
     }
@@ -386,10 +386,14 @@ class _TarjetaPedidoAdminState extends State<_TarjetaPedidoAdmin> {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            const Icon(Icons.table_restaurant_outlined,
-                                size: 12, color: AppColors.cafeMedio),
+                            Icon(
+                                pedido.esDomicilio
+                                    ? Icons.delivery_dining
+                                    : Icons.table_restaurant_outlined,
+                                size: 12,
+                                color: AppColors.cafeMedio),
                             const SizedBox(width: 4),
-                            Text('Mesa ${pedido.mesaVisible}',
+                            Text(pedido.lugar,
                                 style: GoogleFonts.inter(
                                     fontSize: 11, color: AppColors.cafeMedio)),
                           ],
@@ -410,7 +414,7 @@ class _TarjetaPedidoAdminState extends State<_TarjetaPedidoAdmin> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          pedido.estado.etiqueta,
+                          pedido.estadoEtiqueta,
                           style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -484,6 +488,20 @@ class _PanelDetalle extends StatelessWidget {
   final VoidCallback? onAvanzar;
   final VoidCallback? onCancelar;
   final bool esEntregado;
+
+  /// Texto del botón según lo que viene (en domicilio: "Sale a domicilio").
+  String get _textoAvanzar {
+    switch (pedido.estado) {
+      case EstadoPedidoApi.pendiente:
+        return 'Empezar a preparar';
+      case EstadoPedidoApi.en_preparacion:
+        return pedido.esDomicilio ? 'Sale a domicilio' : 'Marcar listo';
+      case EstadoPedidoApi.listo:
+        return pedido.esDomicilio ? 'Marcar entregado' : 'Entregar a la mesa';
+      default:
+        return 'Avanzar estado';
+    }
+  }
 
   const _PanelDetalle({
     required this.pedido,
@@ -568,6 +586,61 @@ class _PanelDetalle extends StatelessWidget {
                 ),
               )),
 
+          // ── Datos de entrega (solo domicilio) ──
+          if (pedido.esDomicilio)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.terracota.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.delivery_dining,
+                          size: 16, color: AppColors.terracota),
+                      const SizedBox(width: 6),
+                      Text('ENTREGA A DOMICILIO',
+                          style: GoogleFonts.inter(
+                              fontSize: 10,
+                              letterSpacing: 1.1,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.terracota)),
+                    ]),
+                    const SizedBox(height: 8),
+                    SelectableText(pedido.direccionDomicilio ?? 'Sin dirección',
+                        style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.cafeOscuro)),
+                    if ((pedido.indicacionesDomicilio ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(pedido.indicacionesDomicilio!,
+                          style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              color: AppColors.cafeMedio)),
+                    ],
+                    if ((pedido.telefonoContacto ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        const Icon(Icons.phone_outlined,
+                            size: 14, color: AppColors.cafeMedio),
+                        const SizedBox(width: 6),
+                        SelectableText(pedido.telefonoContacto!,
+                            style: GoogleFonts.inter(
+                                fontSize: 12, color: AppColors.cafeOscuro)),
+                      ]),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
           // ── Notas del pedido ──
           if (pedido.notas != null && pedido.notas!.isNotEmpty)
             Padding(
@@ -591,6 +664,22 @@ class _PanelDetalle extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+
+          if (pedido.esDomicilio && pedido.costoEnvio > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Envío',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.cafeMedio)),
+                  Text('\$${fmtFn(pedido.costoEnvio)}',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.cafeMedio)),
+                ],
               ),
             ),
 
@@ -623,7 +712,7 @@ class _PanelDetalle extends StatelessWidget {
                       child: OutlinedButton.icon(
                         onPressed: onAvanzar,
                         icon: const Icon(Icons.check, size: 16),
-                        label: const Text('Avanzar estado'),
+                        label: Text(_textoAvanzar),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.oliva,
                           side: const BorderSide(color: AppColors.oliva),
