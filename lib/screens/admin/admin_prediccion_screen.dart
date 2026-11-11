@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../services/api_config.dart';
 import '../../../services/auth_controller.dart';
 import '../../../services/prediccion_service.dart';
 import '../../../theme/app_theme.dart';
@@ -96,6 +98,8 @@ class _AdminPrediccionScreenState extends State<AdminPrediccionScreen> {
                 Text('Análisis', style: AppTheme.titulo(size: 30)),
                 const SizedBox(height: 4),
                 Text('INTELIGENCIA ARTIFICIAL', style: AppTheme.etiqueta()),
+                const SizedBox(height: 16),
+                _botonPowerBi(),
                 const SizedBox(height: 20),
                 if (!conDatos)
                   _tarjetaSinDatos()
@@ -121,6 +125,76 @@ class _AdminPrediccionScreenState extends State<AdminPrediccionScreen> {
                 ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Power BI ───────────────────────────────────────────────
+
+  Future<void> _abrirPowerBi() async {
+    final messenger = ScaffoldMessenger.of(context);
+    void aviso(String m) => messenger.showSnackBar(SnackBar(
+          content: Text(m),
+          behavior: SnackBarBehavior.floating,
+        ));
+    if (ApiConfig.powerBiUrl.isEmpty) {
+      aviso('El panel de Power BI aún no está configurado.');
+      return;
+    }
+    try {
+      final ok = await launchUrl(Uri.parse(ApiConfig.powerBiUrl),
+          mode: LaunchMode.externalApplication);
+      if (!ok) aviso('No se pudo abrir el panel de Power BI.');
+    } catch (_) {
+      aviso('No se pudo abrir el panel de Power BI.');
+    }
+  }
+
+  Widget _botonPowerBi() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _abrirPowerBi,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.superficie,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borde),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.terracota.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.insights, color: AppColors.terracota),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Panel de información detallada',
+                        style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.cafeOscuro)),
+                    const SizedBox(height: 2),
+                    Text('Dashboards completos en Power BI',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.cafeMedio)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.open_in_new, size: 18, color: AppColors.terracota),
+            ],
           ),
         ),
       ),
