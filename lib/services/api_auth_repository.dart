@@ -3,9 +3,10 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/usuario.dart';
 import 'auth_repository.dart';
+import 'api_config.dart';
 
 class ApiAuthRepository implements AuthRepository {
-  static const String _baseUrl = 'http://10.0.2.2:8000';
+  static const String _baseUrl = ApiConfig.baseUrl;
   static const String _kClaveSesion = 'waitless.sesion_actual';
   static const String _kClaveToken = 'waitless.token';
   static const Map<String, String> _headersJson = {

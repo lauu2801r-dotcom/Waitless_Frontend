@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/menu_service.dart';
+import '../widgets/imagen_red.dart';
 import '../services/pedido_service.dart';
 import '../services/restaurantes_service.dart';
 import '../widgets/boton_favorito.dart';
@@ -141,14 +142,19 @@ class _MenuScreenState extends State<MenuScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Container(
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppColors.terracota.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(18),
+            ImagenRed(
+              url: p.imagenUrl,
+              alto: 190,
+              radio: 18,
+              fallback: Container(
+                height: 120,
+                decoration: BoxDecoration(
+                  color: AppColors.terracota.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Center(
+                    child: Text(p.emoji, style: const TextStyle(fontSize: 70))),
               ),
-              child: Center(
-                  child: Text(p.emoji, style: const TextStyle(fontSize: 70))),
             ),
             const SizedBox(height: 14),
             Row(
@@ -445,16 +451,22 @@ class _FilaPlato extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AppColors.terracota.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(12),
+            ImagenRed(
+              url: producto.imagenUrl,
+              ancho: 64,
+              alto: 64,
+              radio: 12,
+              fallback: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.terracota.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                    child: Text(producto.emoji,
+                        style: const TextStyle(fontSize: 26))),
               ),
-              child: Center(
-                  child: Text(producto.emoji,
-                      style: const TextStyle(fontSize: 26))),
             ),
             const SizedBox(width: 12),
             Expanded(

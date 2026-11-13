@@ -9,6 +9,7 @@ import '../services/restaurantes_service.dart';
 import 'menu_screen.dart';
 import 'reservas_screen.dart';
 import '../widgets/boton_favorito.dart';
+import '../widgets/imagen_red.dart';
 import '../widgets/notificaciones_sheet.dart';
 import '../services/notificaciones_service.dart';
 
@@ -353,16 +354,21 @@ class _HomeScreenState extends State<HomeScreen> {
       altura: 0.55,
       contenido: Column(
         children: [
-          Container(
-            width: double.infinity,
-            height: 140,
-            decoration: BoxDecoration(
-              color: AppColors.terracota.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(18),
+          ImagenRed(
+            url: producto.imagenUrl,
+            alto: 170,
+            radio: 18,
+            fallback: Container(
+              width: double.infinity,
+              height: 140,
+              decoration: BoxDecoration(
+                color: AppColors.terracota.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Center(
+                  child: Text(producto.emoji,
+                      style: const TextStyle(fontSize: 80))),
             ),
-            child: Center(
-                child: Text(producto.emoji,
-                    style: const TextStyle(fontSize: 80))),
           ),
           const SizedBox(height: 8),
           Row(
@@ -905,6 +911,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemBuilder: (_, index) {
                           final p = _productosVisibles[index];
                           return _TarjetaPlatoDestacado(
+                            imagenUrl: p.imagenUrl,
                             emoji: p.emoji,
                             nombre: p.nombre,
                             categoria: p.categoria ?? '',
@@ -938,6 +945,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _TarjetaPlatoRecomendado(
+                          imagenUrl: p.imagenUrl,
                           emoji: p.emoji,
                           nombre: p.nombre,
                           descripcion: p.descripcion ?? '',
@@ -1006,16 +1014,22 @@ class _TarjetaRestaurante extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.terracota.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(12),
+                ImagenRed(
+                  url: r.imagenUrl,
+                  ancho: 48,
+                  alto: 48,
+                  radio: 12,
+                  fallback: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.terracota.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                        child: Text(r.emoji,
+                            style: const TextStyle(fontSize: 24))),
                   ),
-                  child: Center(
-                      child:
-                          Text(r.emoji, style: const TextStyle(fontSize: 24))),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1368,6 +1382,7 @@ class _TarjetaPromo extends StatelessWidget {
 }
 
 class _TarjetaPlatoDestacado extends StatelessWidget {
+  final String? imagenUrl;
   final String emoji;
   final String nombre;
   final String categoria;
@@ -1376,6 +1391,7 @@ class _TarjetaPlatoDestacado extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _TarjetaPlatoDestacado({
+    this.imagenUrl,
     required this.emoji,
     required this.nombre,
     required this.categoria,
@@ -1405,15 +1421,22 @@ class _TarjetaPlatoDestacado extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 100,
-              decoration: BoxDecoration(
-                color: AppColors.terracota.withValues(alpha: 0.12),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 48)),
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
+              child: SizedBox(
+                height: 100,
+                width: double.infinity,
+                child: ImagenRed(
+                  url: imagenUrl,
+                  radio: 0,
+                  fallback: Container(
+                    color: AppColors.terracota.withValues(alpha: 0.12),
+                    child: Center(
+                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
+                    ),
+                  ),
+                ),
               ),
             ),
             Padding(
@@ -1461,6 +1484,7 @@ class _TarjetaPlatoDestacado extends StatelessWidget {
 }
 
 class _TarjetaPlatoRecomendado extends StatelessWidget {
+  final String? imagenUrl;
   final String emoji;
   final String nombre;
   final String descripcion;
@@ -1470,6 +1494,7 @@ class _TarjetaPlatoRecomendado extends StatelessWidget {
   final VoidCallback? onAdd;
 
   const _TarjetaPlatoRecomendado({
+    this.imagenUrl,
     required this.emoji,
     required this.nombre,
     required this.descripcion,
@@ -1499,15 +1524,21 @@ class _TarjetaPlatoRecomendado extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 70,
-              height: 70,
-              decoration: BoxDecoration(
-                color: AppColors.terracota.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 36)),
+            ImagenRed(
+              url: imagenUrl,
+              ancho: 70,
+              alto: 70,
+              radio: 12,
+              fallback: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: AppColors.terracota.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 36)),
+                ),
               ),
             ),
             const SizedBox(width: 12),

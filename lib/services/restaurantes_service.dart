@@ -10,6 +10,7 @@ class RestauranteApi {
   final String? descripcion;
   final String? tipoCocina;
   final String emoji;
+  final String? imagenUrl;
   final bool activo;
   final int totalPlatos;
   final int mesasLibres;
@@ -28,6 +29,7 @@ class RestauranteApi {
     this.descripcion,
     this.tipoCocina,
     this.emoji = '🍽️',
+    this.imagenUrl,
     this.activo = true,
     this.totalPlatos = 0,
     this.mesasLibres = 0,
@@ -49,6 +51,7 @@ class RestauranteApi {
         emoji: (j['emoji'] as String?)?.trim().isNotEmpty == true
             ? j['emoji'] as String
             : '🍽️',
+        imagenUrl: j['imagen_url'] as String?,
         activo: j['activo'] as bool? ?? true,
         totalPlatos: (j['total_platos'] as num?)?.toInt() ?? 0,
         mesasLibres: (j['mesas_libres'] as num?)?.toInt() ?? 0,
