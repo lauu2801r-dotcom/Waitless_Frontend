@@ -104,6 +104,7 @@ class PagoApi {
   final String? referencia;
   final String? motivoRechazo;
   final FacturaApi? factura;
+  final DateTime? creadoEn;
 
   const PagoApi({
     required this.id,
@@ -114,6 +115,7 @@ class PagoApi {
     this.referencia,
     this.motivoRechazo,
     this.factura,
+    this.creadoEn,
   });
 
   bool get aprobado => estado == 'aprobado';
@@ -126,6 +128,7 @@ class PagoApi {
         estado: j['estado'] as String,
         referencia: j['referencia'] as String?,
         motivoRechazo: j['motivo_rechazo'] as String?,
+        creadoEn: _fechaUtc(j['creado_en']),
         factura: j['factura'] == null
             ? null
             : FacturaApi.fromJson(j['factura'] as Map<String, dynamic>),
@@ -282,6 +285,7 @@ class PagosService {
     required String metodo,
     double propina = 0,
     bool simularRechazo = false,
+    String? referencia, // la que mostró el portal de pago (WLP-XXXXXXXX)
   }) =>
       _pedir(
         'POST',
@@ -292,8 +296,39 @@ class PagosService {
           'metodo': metodo,
           'propina': propina,
           'simular_rechazo': simularRechazo,
+          if (referencia != null && referencia.isNotEmpty) 'referencia': referencia,
         },
         errorPorDefecto: 'No se pudo procesar el pago',
+      );
+
+  /// Deja registrado en el servidor un intento que el portal de pago rechazó.
+  static Future<InvResultado<PagoApi>> registrarRechazo({
+    required int pedidoId,
+    required String metodo,
+    double propina = 0,
+    String? referencia,
+    String? motivo,
+  }) =>
+      _pedir(
+        'POST',
+        '/pagos/rechazo',
+        (j) => PagoApi.fromJson(j),
+        cuerpo: {
+          'pedido_id': pedidoId,
+          'metodo': metodo,
+          'propina': propina,
+          if (referencia != null && referencia.isNotEmpty) 'referencia': referencia,
+          if (motivo != null && motivo.isNotEmpty) 'motivo': motivo,
+        },
+        errorPorDefecto: 'No se pudo registrar el intento de pago',
+      );
+
+  /// Historial de intentos de pago del cliente (aprobados y rechazados).
+  static Future<InvResultado<List<PagoApi>>> misPagos() => _pedir(
+        'GET',
+        '/pagos/mis-pagos',
+        (j) => (j as List).map((e) => PagoApi.fromJson(e)).toList(),
+        errorPorDefecto: 'No se pudo cargar tu historial de pagos',
       );
 
 

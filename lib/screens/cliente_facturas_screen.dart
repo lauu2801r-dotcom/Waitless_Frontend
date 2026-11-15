@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/inventario_service.dart' show InvExito, InvError;
+import 'cliente_pagos_screen.dart';
 import '../services/pagos_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_strings.dart';
@@ -101,6 +102,14 @@ class _ClienteFacturasScreenState extends State<ClienteFacturasScreen> {
                 fontWeight: FontWeight.w600,
                 color: AppColors.cafeOscuro)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history, color: AppColors.terracota),
+            tooltip: 'Historial de pagos',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ClientePagosScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.terracota),
             onPressed: _cargar,

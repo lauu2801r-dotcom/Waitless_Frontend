@@ -12,11 +12,13 @@ class ResultadoPortal {
   final String estado; // aprobado | rechazado | cancelado
   final String metodo; // tarjeta | transferencia | billetera | '' (si no se eligió)
   final String referencia;
+  final String motivoTexto; // por qué se rechazó (si aplica)
 
   const ResultadoPortal({
     required this.estado,
     required this.metodo,
     required this.referencia,
+    this.motivoTexto = '',
   });
 
   bool get aprobado => estado == 'aprobado';
@@ -35,6 +37,7 @@ class ResultadoPortal {
       estado: (j['estado'] ?? 'cancelado').toString(),
       metodo: _aMetodoApi((j['metodo'] ?? '').toString()),
       referencia: (j['ref'] ?? '').toString(),
+      motivoTexto: (j['motivo_texto'] ?? '').toString(),
     );
   }
 }

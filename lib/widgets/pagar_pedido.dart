@@ -142,6 +142,7 @@ class _PagarSheetState extends State<_PagarSheet> {
   // Método con el que se aprobó el pago en el portal (si el registro en el servidor falla,
   // se reintenta solo el registro, sin volver a cobrar).
   String? _metodoAprobado;
+  String? _referenciaPortal; // referencia WLP-… que mostró el portal
 
   @override
   void dispose() {
@@ -186,6 +187,16 @@ class _PagarSheetState extends State<_PagarSheet> {
         return;
       }
       if (!res.aprobado) {
+        // Un intento rechazado queda registrado en el historial (cancelar no cuenta).
+        if (res.estado == 'rechazado') {
+          PagosService.registrarRechazo(
+            pedidoId: widget.pedido.id,
+            metodo: res.metodo.isEmpty ? 'tarjeta' : res.metodo,
+            propina: _propina,
+            referencia: res.referencia,
+            motivo: res.motivoTexto,
+          );
+        }
         setState(() {
           _procesando = false;
           _error = 'El pago fue rechazado. Intenta de nuevo o usa otro método.';
@@ -193,6 +204,7 @@ class _PagarSheetState extends State<_PagarSheet> {
         return;
       }
       _metodoAprobado = res.metodo.isEmpty ? 'tarjeta' : res.metodo;
+      _referenciaPortal = res.referencia;
     }
 
     // 2) Registrar el pago y generar la factura en el servidor.
@@ -200,6 +212,7 @@ class _PagarSheetState extends State<_PagarSheet> {
       pedidoId: widget.pedido.id,
       metodo: _metodoAprobado!,
       propina: _propina,
+      referencia: _referenciaPortal,
     );
     if (!mounted) return;
     if (r is InvExito<PagoApi>) {
