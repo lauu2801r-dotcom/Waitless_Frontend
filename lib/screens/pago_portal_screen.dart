@@ -22,11 +22,10 @@ class ResultadoPortal {
   bool get aprobado => estado == 'aprobado';
   bool get cancelado => estado == 'cancelado';
 
-  /// El portal usa card | bank | wallet; el backend usa tarjeta | transferencia | billetera.
+  /// El portal usa credit | debit | pse; el backend usa tarjeta | transferencia.
   static String _aMetodoApi(String m) => switch (m) {
-        'card' => 'tarjeta',
-        'bank' => 'transferencia',
-        'wallet' => 'billetera',
+        'credit' || 'debit' || 'card' => 'tarjeta',
+        'pse' || 'bank' => 'transferencia',
         _ => '',
       };
 
@@ -141,6 +140,18 @@ class _PagoPortalScreenState extends State<PagoPortalScreen> {
     }
   }
 
+  /// Botón "atrás": primero retrocede un paso dentro del portal; si ya está en la
+  /// primera pantalla (o en el resultado), pregunta si se quiere cancelar el pago.
+  Future<void> _atras() async {
+    var manejado = false;
+    try {
+      final r = await _controller
+          .runJavaScriptReturningResult('window.WL_atras ? window.WL_atras() : false');
+      manejado = r.toString().toLowerCase() == 'true';
+    } catch (_) {}
+    if (!manejado) await _confirmarSalida();
+  }
+
   void _reintentar() {
     setState(() {
       _error = false;
@@ -154,7 +165,7 @@ class _PagoPortalScreenState extends State<PagoPortalScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _confirmarSalida();
+        if (!didPop) _atras();
       },
       child: Scaffold(
         backgroundColor: AppColors.crema,
@@ -163,9 +174,17 @@ class _PagoPortalScreenState extends State<PagoPortalScreen> {
           elevation: 0,
           foregroundColor: AppColors.cafeOscuro,
           leading: IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: _confirmarSalida,
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Volver',
+            onPressed: _atras,
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancelar pago',
+              onPressed: _confirmarSalida,
+            ),
+          ],
           title: Row(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.lock_outline, size: 18),
             const SizedBox(width: 6),
