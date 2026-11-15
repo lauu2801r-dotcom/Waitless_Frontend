@@ -30,6 +30,7 @@ dependencies:
   share_plus: ^10.1.4
   path_provider: ^2.1.5
   url_launcher: ^6.3.3
+  webview_flutter: ^4.14.1
 
 dev_dependencies:
   flutter_test:

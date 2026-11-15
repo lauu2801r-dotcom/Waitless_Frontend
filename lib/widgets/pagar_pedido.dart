@@ -1,9 +1,9 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../screens/cliente_facturas_screen.dart';
+import '../screens/pago_portal_screen.dart';
 import '../services/inventario_service.dart' show InvExito, InvError;
 import '../services/pagos_service.dart';
 import '../services/pedido_service.dart';
@@ -134,15 +134,14 @@ class _PagarSheet extends StatefulWidget {
 }
 
 class _PagarSheetState extends State<_PagarSheet> {
-  // El cliente paga en línea: el efectivo lo cobra el personal.
-  static const _metodos = ['tarjeta', 'billetera', 'transferencia'];
   static const _impuestoPct = 8;
 
   final _propinaCtrl = TextEditingController();
-  String _metodo = 'tarjeta';
-  bool _simularRechazo = false;
   bool _procesando = false;
   String? _error;
+  // Método con el que se aprobó el pago en el portal (si el registro en el servidor falla,
+  // se reintenta solo el registro, sin volver a cobrar).
+  String? _metodoAprobado;
 
   @override
   void dispose() {
@@ -164,11 +163,43 @@ class _PagarSheetState extends State<_PagarSheet> {
       _procesando = true;
       _error = null;
     });
+
+    // 1) Pago en el portal WaitLess Pay (simulado), salvo que ya esté aprobado.
+    if (_metodoAprobado == null) {
+      final res = await Navigator.of(context).push<ResultadoPortal>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => PagoPortalScreen(
+            monto: _total,
+            restaurante: widget.pedido.restauranteNombre ?? 'Restaurante',
+            pedido: 'WL-${widget.pedido.id}',
+            tipo: widget.pedido.esDomicilio ? 'domicilio' : 'pedido',
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (res == null || res.cancelado) {
+        setState(() {
+          _procesando = false;
+          _error = 'Pago cancelado. No se realizó ningún cobro.';
+        });
+        return;
+      }
+      if (!res.aprobado) {
+        setState(() {
+          _procesando = false;
+          _error = 'El pago fue rechazado. Intenta de nuevo o usa otro método.';
+        });
+        return;
+      }
+      _metodoAprobado = res.metodo.isEmpty ? 'tarjeta' : res.metodo;
+    }
+
+    // 2) Registrar el pago y generar la factura en el servidor.
     final r = await PagosService.pagar(
       pedidoId: widget.pedido.id,
-      metodo: _metodo,
+      metodo: _metodoAprobado!,
       propina: _propina,
-      simularRechazo: _simularRechazo,
     );
     if (!mounted) return;
     if (r is InvExito<PagoApi>) {
@@ -178,12 +209,14 @@ class _PagarSheetState extends State<_PagarSheet> {
       }
       setState(() {
         _procesando = false;
-        _error = '${r.datos.motivoRechazo ?? 'Pago rechazado'}. Intenta de nuevo o cambia el método.';
+        _error =
+            '${r.datos.motivoRechazo ?? 'No se pudo registrar el pago'}. Toca el botón para reintentar.';
       });
     } else if (r is InvError<PagoApi>) {
       setState(() {
         _procesando = false;
-        _error = r.mensaje;
+        _error =
+            'Tu pago fue aprobado pero no pudimos registrarlo: ${r.mensaje}. Toca el botón para reintentar el registro.';
       });
     }
   }
@@ -209,26 +242,6 @@ class _PagarSheetState extends State<_PagarSheet> {
             _fila('Propina', moneda(_propina)),
             _fila('Total', moneda(_total), fuerte: true),
             const SizedBox(height: 16),
-            Text('MÉTODO DE PAGO', style: AppTheme.etiqueta()),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _metodos.map((m) {
-                final activo = m == _metodo;
-                return ChoiceChip(
-                  selected: activo,
-                  onSelected:
-                      _procesando ? null : (_) => setState(() => _metodo = m),
-                  label: Text(nombreMetodo(m)),
-                  selectedColor: AppColors.terracota,
-                  labelStyle: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: activo ? AppColors.crema : AppColors.cafeOscuro),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
             Text('PROPINA', style: AppTheme.etiqueta()),
             const SizedBox(height: 8),
             Wrap(spacing: 8, children: [
@@ -246,22 +259,9 @@ class _PagarSheetState extends State<_PagarSheet> {
               decoration: const InputDecoration(
                   labelText: 'Otro valor de propina', prefixText: '\$ '),
             ),
-            // Solo visible al correr la app en modo desarrollo (para demostrar el reintento).
-            if (kDebugMode)
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _simularRechazo,
-                onChanged: _procesando
-                    ? null
-                    : (v) => setState(() => _simularRechazo = v),
-                activeThumbColor: AppColors.terracota,
-                title: Text('Simular rechazo (solo pruebas)',
-                    style: GoogleFonts.inter(
-                        fontSize: 12, color: AppColors.cafeMedio)),
-              ),
             const SizedBox(height: 6),
             Text(
-              'Pago simulado: no se guardan datos de tarjeta. Al aprobarse recibirás la factura en tu correo.',
+              'Pagarás en WaitLess Pay (portal de pruebas): no se usan datos reales ni se guardan datos de tarjeta. Al aprobarse recibirás la factura en tu correo.',
               style: GoogleFonts.inter(fontSize: 11, color: AppColors.cafeMedio),
             ),
             if (_error != null)
@@ -288,9 +288,11 @@ class _PagarSheetState extends State<_PagarSheet> {
                 ),
                 child: Text(_procesando
                     ? 'Procesando…'
-                    : (_error != null
-                        ? 'Reintentar pago'
-                        : 'Pagar ${moneda(_total)}')),
+                    : (_metodoAprobado != null
+                        ? 'Reintentar registro del pago'
+                        : (_error != null
+                            ? 'Reintentar pago'
+                            : 'Pagar ${moneda(_total)}'))),
               ),
             ),
           ],
